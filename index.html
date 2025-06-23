@@ -4,24 +4,33 @@
   <meta charset="UTF-8">
   <title>Edit User</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    .input {
+      @apply border border-gray-300 rounded px-3 py-2 w-full;
+    }
+    .shift-left {
+      margin-right: 400px;
+      transition: margin-right 0.3s;
+    }
+    .transition-smooth {
+      transition: all 0.3s ease-in-out;
+    }
+  </style>
 </head>
 <body class="bg-gray-100 p-6">
 
-  <!-- Edit Form -->
-  <div class="bg-white p-6 rounded shadow-md max-w-2xl mx-auto" id="editForm">
+  <div class="bg-white p-6 rounded shadow-md max-w-2xl mx-auto transition-all duration-300" id="editForm">
     <h2 class="text-xl font-semibold mb-4">Edit User: <span class="text-blue-600">UnRegistered1347013_583374109</span></h2>
-
-    <!-- User Info -->
     <div class="grid grid-cols-2 gap-4">
       <div><label>Username:</label><input id="username" type="text" class="input" value="UnRegistered1347013_583374109" disabled></div>
       <div><label>Member Number:</label><input id="memberNumber" type="text" class="input" value="1347013" disabled></div>
       <div><label>First Name:</label><input id="firstName" type="text" class="input" value="JERRY"></div>
-      <div><label>Last Name:</label><input id="lastName" type="text" class="input" value="ARROYO"></div>
-      <div><label>Email:</label><input id="email" type="text" class="input"></div>
+      <div><label>Last Name:</label><input id="lastName" type="text" class="input" value="GOMEZ"></div>
+      <div><label>Email:</label><input id="email" type="text" class="input" value="jerry.gomez@final.com"></div>
       <div><label>Phone Number:</label><input id="phone" type="text" class="input" value="7874330357"></div>
+      <div><label>Status:</label><input id="status" type="text" class="input" value="Deactivated"></div>
     </div>
-
-    <!-- Actions -->
     <div class="flex justify-end gap-4 mt-6">
       <button class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
       <button class="bg-red-600 text-white px-4 py-2 rounded">Submit</button>
@@ -29,179 +38,135 @@
     </div>
   </div>
 
-  <!-- Timeline Slide Panel -->
   <div id="timelinePanel" class="fixed top-0 right-0 w-96 h-full bg-white shadow-lg transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
     <div class="p-4 border-b flex justify-between items-center">
       <h3 class="text-lg font-semibold">Change History</h3>
-      <button onclick="window.toggleTimeline()" class="text-gray-500">✕</button>
+      <button onclick="toggleTimeline()" class="text-gray-500 material-icons">close</button>
     </div>
     <div class="p-4 space-y-6" id="timelineContent"></div>
   </div>
 
-  <script>
+<script>
 function toggleTimeline() {
   const panel = document.getElementById('timelinePanel');
-  renderTimeline();
-  panel.classList.toggle('translate-x-full');
+  const form = document.getElementById('editForm');
+  const show = panel.classList.toggle('translate-x-full');
+  if (!show) {
+    renderTimeline();
+    form.classList.add('shift-left');
+  } else {
+    form.classList.remove('shift-left');
+  }
 }
 
-
 const mockChanges = [
-  // Type: 'C' = Created, 'U' = Updated, 'D' = Deleted
   {
-    date: "2025-06-18",
-    time: "08:00",
-    field: "username",
-    label: "Username created",
-    old: "",
-    new: "UnRegistered1347013_583374109",
-    by: "System",
-    type: "C"
+    date: "2025-01-15", time: "09:00", type: "C", by: "System",
+    changes: [
+      { field: "username", label: "Username", old: "", new: "UnRegistered1347013_583374109" },
+      { field: "memberNumber", label: "Member Number", old: "", new: "1347013" },
+      { field: "firstName", label: "First Name", old: "", new: "JERRY" },
+      { field: "lastName", label: "Last Name", old: "", new: "GOMEZ" },
+      { field: "email", label: "Email", old: "", new: "jerry.gomez@initial.com" },
+      { field: "phone", label: "Phone Number", old: "", new: "9876543210" },
+      { field: "status", label: "Status", old: "", new: "Active" }
+    ]
   },
   {
-    date: "2025-06-18",
-    time: "08:00",
-    field: "memberNumber",
-    label: "Member Number created",
-    old: "",
-    new: "1347013",
-    by: "System",
-    type: "C"
+    date: "2025-02-20", time: "11:30", type: "U", by: "AdminUser01",
+    changes: [
+      { field: "email", label: "Email", old: "jerry.gomez@initial.com", new: "jerry.gomez@phase2.com" }
+    ]
   },
   {
-    date: "2025-06-18",
-    time: "08:00",
-    field: "firstName",
-    label: "First Name created",
-    old: "",
-    new: "JERRY",
-    by: "System",
-    type: "C"
+    date: "2025-03-15", time: "10:15", type: "U", by: "EditorUser",
+    changes: [
+      { field: "phone", label: "Phone Number", old: "9876543210", new: "7874330357" }
+    ]
   },
   {
-    date: "2025-06-18",
-    time: "08:00",
-    field: "lastName",
-    label: "Last Name created",
-    old: "",
-    new: "ARROYO",
-    by: "System",
-    type: "C"
+    date: "2025-04-05", time: "08:50", type: "U", by: "Reviewer02",
+    changes: [
+      { field: "status", label: "Status", old: "Active", new: "Suspended" }
+    ]
   },
   {
-    date: "2025-06-18",
-    time: "08:00",
-    field: "email",
-    label: "Email created",
-    old: "",
-    new: "john.doe@old.com",
-    by: "System",
-    type: "C"
+    date: "2025-05-10", time: "14:25", type: "U", by: "ManagerA",
+    changes: [
+      { field: "lastName", label: "Last Name", old: "GOMEZ", new: "ARROYO" }
+    ]
   },
   {
-    date: "2025-06-18",
-    time: "08:00",
-    field: "phone",
-    label: "Phone Number created",
-    old: "",
-    new: "1234567890",
-    by: "System",
-    type: "C"
+    date: "2025-06-01", time: "12:00", type: "U", by: "System",
+    changes: [
+      { field: "status", label: "Status", old: "Suspended", new: "Active" }
+    ]
   },
   {
-    date: "2025-06-20",
-    time: "09:20",
-    field: "firstName",
-    label: "First Name updated",
-    old: "JEREMY",
-    new: "JERRY",
-    by: "SuperAdmin",
-    type: "U"
-  },
-  {
-    date: "2025-06-22",
-    time: "10:45",
-    field: "lastName",
-    label: "Last Name updated",
-    old: "SMITH",
-    new: "ARROYO",
-    by: "EditorUser01",
-    type: "U"
-  },
-  {
-    date: "2025-06-23",
-    time: "16:00",
-    field: "email",
-    label: "Email updated",
-    old: "john.doe@old.com",
-    new: "john.doe@new.com",
-    by: "AdminUser123",
-    type: "U"
-  },
-  {
-    date: "2025-06-23",
-    time: "16:02",
-    field: "phone",
-    label: "Phone Number updated",
-    old: "1234567890",
-    new: "7874330357",
-    by: "AdminUser123",
-    type: "U"
+    date: "2025-06-23", time: "16:00", type: "U", by: "AdminUserFinal",
+    changes: [
+      { field: "email", label: "Email", old: "jerry.gomez@phase2.com", new: "jerry.gomez@final.com" },
+      { field: "status", label: "Status", old: "Active", new: "Deactivated" }
+    ]
   }
 ];
 
-    
+function renderTimeline() {
+  const container = document.getElementById("timelineContent");
+  container.innerHTML = "";
 
-    function renderTimeline() {
-      const grouped = {};
-      mockChanges.forEach(change => {
-        if (!grouped[change.date]) grouped[change.date] = [];
-        grouped[change.date].push(change);
-      });
+  mockChanges.sort((a, b) => b.date.localeCompare(a.date)).forEach((entry, index) => {
+    const group = document.createElement("div");
+    const isOpen = index === 0 ? '' : 'hidden';
+    const chevron = index === 0 ? 'expand_less' : 'expand_more';
+    const typeBadge = entry.type === 'C' ? '<span class="ml-2 text-green-600 bg-green-100 px-2 py-0.5 rounded text-xs">Created</span>' : '<span class="ml-2 text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded text-xs">Updated</span>';
 
-      const container = document.getElementById("timelineContent");
-      container.innerHTML = "";
-
-      Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])).forEach(([date, changes]) => {
-        const group = document.createElement("div");
-        const typeBadge = changes[0].type === 'C' ? '<span class="ml-2 text-green-600 bg-green-100 px-2 py-0.5 rounded text-xs">Created</span>' : changes[0].type === 'U' ? '<span class="ml-2 text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded text-xs">Updated</span>' : '<span class="ml-2 text-red-600 bg-red-100 px-2 py-0.5 rounded text-xs">Deleted</span>';
-       group.innerHTML = `
-  <div class="flex justify-between items-center mb-2">
-    <div class="text-gray-700 font-semibold">${date} ${typeBadge}</div>
-    <button onclick="applyAllChanges('${date}')" class="text-sm text-blue-600 hover:underline">Revert</button>
-  </div>
-`;
-
-
-        changes.forEach(change => {
-          const div = document.createElement("div");
-          div.className = "border-l-4 pl-4 mb-3 cursor-pointer";
-          div.classList.add(change.field === 'status' ? 'border-yellow-500' : change.field === 'phone' ? 'border-green-500' : change.field === 'lastName' ? 'border-purple-500' : 'border-blue-500');
-          div.addEventListener('click', function() {
-  const valueToApply = change.type === 'C' ? change.new : change.old;
-  highlightChange(change.field, valueToApply);
-});
-          div.innerHTML = `
-            <div class="text-sm text-gray-600">${change.time} UTC</div>
+    group.innerHTML = `
+      <div class="flex justify-between items-center mb-2 cursor-pointer transition-smooth" onclick="toggleDateGroup('${entry.date}')">
+        <div class="text-gray-700 font-semibold flex items-center">${entry.date} ${typeBadge}</div>
+        <span class="material-icons transition-smooth" id="icon-${entry.date}">${chevron}</span>
+      </div>
+      <div id="group-${entry.date}" class="transition-smooth ${isOpen}">
+        ${entry.changes.map(change => `
+          <div class="border-l-4 pl-4 mb-3 cursor-pointer border-blue-500 transition-smooth" onclick="highlightChange('${change.field}', '${entry.type === 'C' ? change.new : change.old}')">
+            <div class="text-sm text-gray-600">${entry.time} UTC</div>
             <div class="font-semibold">${change.label}</div>
-            <div class="text-sm text-gray-700">Old: ${change.old} → New: ${change.new}</div>
-            <div class="text-sm text-gray-500">By: ${change.by}</div>
-          `;
-          group.appendChild(div);
-        });
+            <div class="text-sm text-gray-700">Old: ${change.old || '(none)'} → New: ${change.new}</div>
+            <div class="text-sm text-gray-500">By: ${entry.by}</div>
+          </div>
+        `).join('')}
+        <div class="flex justify-end">
+          <button onclick="applyAllChanges('${entry.date}'); event.stopPropagation();" class="text-blue-600 hover:text-blue-800">
+            <span class="material-icons">history</span>
+          </button>
+        </div>
+      </div>`;
 
-        container.appendChild(group);
-      });
-    }
+    container.appendChild(group);
+  });
+}
 
-    function highlightChange(field, value) {
+function toggleDateGroup(date) {
+  const el = document.getElementById(`group-${date}`);
+  const icon = document.getElementById(`icon-${date}`);
+  const allGroups = document.querySelectorAll('[id^="group-"]');
+  const allIcons = document.querySelectorAll('[id^="icon-"]');
+
+  allGroups.forEach(g => g.classList.add('hidden'));
+  allIcons.forEach(i => i.innerText = 'expand_more');
+
+  if (el.classList.contains('hidden')) {
+    el.classList.remove('hidden');
+    icon.innerText = 'expand_less';
+  } else {
+    el.classList.add('hidden');
+    icon.innerText = 'expand_more';
+  }
+}
+
+function highlightChange(field, value) {
   const fieldMap = {
-    email: 'email',
-    phone: 'phone',
-    lastName: 'lastName',
-    firstName: 'firstName',
-    username: 'username',
-    memberNumber: '' // member number is disabled; skip updating
+    email: 'email', phone: 'phone', lastName: 'lastName', firstName: 'firstName', status: 'status', username: 'username', memberNumber: 'memberNumber'
   };
   const elementId = fieldMap[field];
   if (elementId) {
@@ -213,20 +178,12 @@ const mockChanges = [
 }
 
 function applyAllChanges(date) {
-  const changes = mockChanges.filter(change => change.date === date);
-  changes.forEach(change => {
-    // For created entries with old value empty, use 'new' instead of 'old'
-    const valueToApply = change.type === 'C' ? change.new : change.old;
+  const entry = mockChanges.find(change => change.date === date);
+  entry.changes.forEach(change => {
+    const valueToApply = entry.type === 'C' ? change.new : change.old;
     highlightChange(change.field, valueToApply);
   });
 }
-  </script>
-
-  <style>
-    .input {
-      @apply border border-gray-300 rounded px-3 py-2 w-full;
-    }
-  </style>
-
+</script>
 </body>
 </html>
