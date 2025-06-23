@@ -1,0 +1,2715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Deep Dive: Audit Log Implementation for IW SpudWrench Project</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" xintegrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Mermaid.js for flowcharts -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({ startOnLoad: true });</script>
+    <!-- Material Icons (ONLY this is needed, Materialize CSS is removed to prevent conflicts) -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+
+
+    <style>
+        :root {
+            --primary-blue: #3498db; /* Softer blue */
+            --secondary-blue: #7f8c8d; /* Grey-blue */
+            --light-bg: #ecf0f1; /* Very light grey */
+            --medium-bg: #e0e6e7; /* Slightly darker light grey */
+            --dark-text: #2c3e50; /* Dark charcoal */
+            --code-bg: #f5f8fa; /* Light code background */
+            --code-border: #dae1e7; /* Light code border */
+            --accent-orange: #f39c12; /* Vibrant accent for buttons */
+            --accent-orange-hover: #e67e22; /* Darker orange for hover */
+            --ai-blue: #3498db; /* Consistent AI button color */
+            --ai-blue-hover: #2980b9; /* Darker AI button hover */
+            --shadow-light: rgba(0, 0, 0, 0.1);
+            --shadow-medium: rgba(0, 0, 0, 0.15);
+            --shadow-strong: rgba(0, 0, 0, 0.25); /* Stronger shadow for floating elements */
+        }
+
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            line-height: 1.7; /* Slightly increased line height for readability */
+            color: var(--dark-text); 
+            background-color: var(--light-bg); 
+            width: 100%; /* Ensure full width */
+            overflow-x: hidden; /* Prevent horizontal scroll */
+            padding-bottom: 80px; /* Space for fixed elements */
+            padding-top: 60px; /* Add padding for fixed navbar */
+        }
+        /* Fix for multiple scrollbars: Hide body overflow when modal is open */
+        body.modal-open {
+            overflow: hidden;
+            padding-right: 0px !important; /* Prevents content shift when scrollbar disappears */
+        }
+
+        .container { 
+            width: 100%; /* Make container full width */
+            max-width: 1200px; /* Max width for content */
+            padding: 2rem 4%; /* Adjusted padding, fluid horizontal */
+            margin: 0 auto; 
+            animation: fadeIn 0.8s ease-out; 
+        } 
+        h1, h2, h3, h4, h5, h6 { 
+            color: var(--primary-blue); 
+            margin-top: 2.25rem; /* More spacing for headings */
+            margin-bottom: 1rem; 
+            font-weight: 700; /* Bolder headings */
+        }
+        h1 { font-size: 2.8rem; }
+        h2 { font-size: 2.2rem; }
+        h3 { font-size: 1.8rem; }
+        p {
+            margin-bottom: 1em; /* Consistent paragraph spacing */
+        }
+        ul {
+            padding-left: 1.5em; /* Proper list indentation */
+            margin-bottom: 1em;
+        }
+
+        pre { 
+            background-color: var(--code-bg); 
+          
+            color: var(--dark-text); 
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; 
+            font-size: 0.9em; /* Slightly smaller code font */
+            padding: 1.8em; /* More padding in code blocks */
+            margin-bottom: 2em; /* More space below code blocks */
+            border-radius: 0.8rem; /* More rounded corners */
+            overflow-x: auto;
+            box-shadow: 0 4px 10px var(--shadow-light); /* Subtle shadow */
+        }
+        code { 
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; 
+            font-size: 0.95em; 
+            background-color: var(--code-border); 
+            padding: 0.2em 0.4em; 
+            border-radius: 0.3em; 
+        }
+        .explanation { 
+            background-color: var(--medium-bg); 
+            border-left: 4px solid var(--primary-blue); 
+            padding: 1.5em; /* More padding */
+            margin-bottom: 2em; 
+            border-radius: 0.8rem; 
+            box-shadow: 0 4px 8px var(--shadow-light); /* Subtle shadow */
+        }
+        .section-header { 
+            border-bottom: 2px solid var(--primary-blue); 
+            padding-bottom: 1rem; 
+            margin-bottom: 3rem; /* More space below section headers */
+            font-size: 2.5rem; /* Larger main section headers */
+        }
+        .navbar { /* Make navbar fixed */
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 1030; /* Higher than other content, lower than modal */
+            box-shadow: 0 2px 5px var(--shadow-light); /* Add shadow to navbar */
+        }
+        .navbar-brand { font-weight: 700; color: var(--primary-blue) !important; font-size: 1.5rem; }
+        .nav-link { 
+            color: var(--secondary-blue) !important; 
+            border-radius: 0.6rem; /* More rounded nav links */
+            transition: all 0.3s ease; 
+            padding: 0.9rem 1.4rem; 
+            font-weight: 600; /* Bolder nav links */
+        }
+        .nav-link:hover { 
+            background-color: var(--medium-bg); 
+            color: var(--primary-blue) !important; 
+            transform: translateY(-3px); /* More pronounced hover effect */
+            box-shadow: 0 4px 8px var(--shadow-light);
+        }
+        .code-block-header { 
+            background-color: var(--primary-blue); 
+            color: white; 
+            padding: 1rem 1.5rem; /* Increased padding */
+            border-radius: 0.8rem 0.8rem 0 0; 
+            font-weight: 600; 
+            margin-top: 2rem; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .code-block-header button {
+            background-color: var(--accent-orange); /* Use accent color */
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem; /* Increased padding */
+            border-radius: 0.4rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+            box-shadow: 0 2px 4px var(--shadow-light);
+        }
+        .code-block-header button:hover {
+            background-color: var(--accent-orange-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px var(--shadow-medium);
+        }
+     
+        
+        .mermaid-diagram-container {
+            padding: 30px; /* Increased padding */
+            border: 1px dashed var(--secondary-blue);
+            border-radius: 1rem; /* More rounded */
+            margin-bottom: 3rem; /* More space */
+            background-color: #ffffff;
+            box-shadow: 0 6px 15px var(--shadow-medium); /* More prominent shadow */
+            text-align: center;
+        }
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .llm-section {
+            background-color: var(--medium-bg); /* Use medium background for LLM section */
+            border-left: 5px solid var(--primary-blue);
+            padding: 2em; /* Increased padding */
+            border-radius: 0.8rem;
+            margin-top: 3rem;
+            box-shadow: 0 6px 15px var(--shadow-medium);
+        }
+        .llm-input-group textarea {
+            resize: vertical;
+            min-height: 90px; /* Slightly taller input */
+            border-radius: 0.5em; /* More rounded */
+            border: 1px solid var(--code-border);
+            padding: 1em;
+            font-size: 1em;
+            width: 100%;
+            box-shadow: inset 0 1px 3px var(--shadow-light); /* Inner shadow */
+        }
+        .llm-output-area {
+            background-color: white;
+            border: 1px solid var(--code-border);
+            border-radius: 0.5em;
+            padding: 1.5em;
+            min-height: 120px;
+            margin-top: 1.5em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            box-shadow: 0 4px 10px var(--shadow-light);
+        }
+        .llm-loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-blue);
+            border-radius: 50%;
+            width: 30px; /* Slightly larger spinner */
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        section { animation: fadeIn 0.8s ease-out; }
+
+        .code-refinement-output {
+            background-color: #fdfdfd;
+            border: 1px solid #cce5ff;
+            border-left: 5px solid #007bff;
+            padding: 1em;
+            margin-top: 1em;
+            border-radius: 0.5rem;
+            font-size: 0.9em;
+            color: #333;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .code-refinement-output.d-none {
+            display: none;
+        }
+
+        .ai-explain-button {
+            background-color: var(--ai-blue); /* Info blue */
+            color: white;
+            border: none;
+            padding: 0.3rem 0.7rem; /* Adjusted padding for better look */
+            border-radius: 0.4rem;
+            cursor: pointer;
+            font-weight: 600; /* Bolder AI button */
+            transition: background-color 0.2s ease, transform 0.2s ease;
+            margin-left: 12px; /* Spacing from header text */
+            font-size: 0.85em; /* Slightly larger font size */
+            display: inline-flex;
+            align-items: center;
+            box-shadow: 0 2px 4px var(--shadow-light);
+        }
+        .ai-explain-button:hover {
+            background-color: var(--ai-blue-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px var(--shadow-medium);
+        }
+        .ai-explain-button .material-icons {
+            font-size: 1.1em;
+            margin-right: 5px; /* More space between icon and text */
+        }
+
+        /* Highlight.js specific overrides for readability in code blocks */
+        /* These styles are kept for code readability even without custom modal styles */
+        .modal-body pre code.hljs {
+            color: var(--dark-text); /* Fallback for general code text */
+        }
+        .modal-body pre code.hljs .hljs-comment,
+        .modal-body pre code.hljs .hljs-quote {
+            color: #6a737d; /* Consistent grey for comments/quotes */
+        }
+        .modal-body pre code.hljs .hljs-keyword,
+        .modal-body pre code.hljs .hljs-selector-tag,
+        .modal-body pre code.hljs .hljs-meta-keyword {
+            color: #d73a49; /* Distinct color for keywords */
+        }
+        .modal-body pre code.hljs .hljs-string {
+            color: #032f62; /* Darker blue for strings */
+        }
+        .modal-body pre code.hljs .hljs-attr,
+        .modal-body pre code.hljs .hljs-name,
+        .modal-body pre code.hljs .hljs-tag {
+            color: #22863a; /* Green for attributes/tags */
+        }
+
+
+        /* The following are the only custom modal styles retained for basic layout/color */
+        .modal-body .markdown-content h1,
+        .modal-body .markdown-content h2,
+        .modal-body .markdown-content h3,
+        .modal-body .markdown-content h4,
+        .modal-body .markdown-content h5,
+        .modal-body .markdown-content h6 {
+            color: var(--dark-text); 
+            margin-top: 1.25rem; /* Reduced margin-top for smaller headings */
+            margin-bottom: 0.5rem; /* Reduced margin-bottom */
+            font-weight: 700;
+        }
+        .modal-body .markdown-content h1 { font-size: 1.8rem; } 
+        .modal-body .markdown-content h2 { font-size: 1.6rem; }
+        .modal-body .markdown-content h3 { font-size: 1.4rem; }
+        .modal-body .markdown-content h4 { font-size: 1.2rem; }
+        .modal-body .markdown-content h5 { font-size: 1.1rem; }
+        .modal-body .markdown-content h6 { font-size: 1.0rem; }
+
+        .follow-up-responses .user-question {
+            background-color: var(--primary-blue) !important; 
+            color: white !important;
+            border-radius: 0.5rem;
+            padding: 1em;
+            margin-bottom: 1em;
+            box-shadow: 0 2px 5px var(--shadow-light);
+            animation: fadeIn 0.5s ease-out; 
+        }
+        .follow-up-responses .ai-response {
+            background-color: #fdfdfd !important; 
+            border: 1px solid var(--code-border);
+            border-left: 4px solid var(--accent-orange); 
+            border-radius: 0.5rem;
+            padding: 1em;
+            margin-bottom: 1em;
+            box-shadow: 0 2px 5px var(--shadow-light);
+            animation: fadeIn 0.5s ease-out; 
+        }
+        .follow-up-responses .error-message {
+            background-color: #e74c3c !important; 
+            color: white;
+            border-radius: 0.5rem;
+            padding: 1em;
+            margin-bottom: 1em;
+            box-shadow: 0 2px 5px var(--shadow-light);
+        }
+
+
+        /* Page Search Bar */
+        .search-bar-container {
+            margin-bottom: 2rem;
+            position: sticky;
+            top: 60px; /* Position below the fixed navbar */
+            z-index: 1000; /* Ensure it stays on top of regular content */
+            background-color: var(--light-bg);
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--medium-bg);
+            box-shadow: 0 2px 5px var(--shadow-light);
+        }
+        .search-input {
+            border-radius: 0.5rem;
+            border: 1px solid var(--code-border);
+            padding: 0.8em 1.2em;
+            font-size: 1em;
+            width: 100%;
+            box-shadow: inset 0 1px 3px var(--shadow-light);
+            transition: all 0.3s ease;
+        }
+        .search-input:focus {
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 0.25rem rgba(52, 152, 219, 0.25);
+        }
+        .search-result-highlight {
+            background-color: #ffe082; /* Soft yellow highlight */
+            padding: 2px 0;
+            border-radius: 3px;
+        }
+        .search-no-results {
+            color: #e74c3c;
+            font-weight: 600;
+            margin-top: 0.5rem;
+        }
+
+        /* Floating AI Assistant Button */
+        .fab-ai-assistant {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: var(--accent-orange);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.2rem;
+            box-shadow: 0 5px 15px var(--shadow-strong);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1050; /* Above modal backdrop */
+        }
+        .fab-ai-assistant:hover {
+            background-color: var(--accent-orange-hover);
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 8px 20px var(--shadow-strong);
+        }
+        .fab-ai-assistant .material-icons {
+            font-size: 1.8rem;
+            line-height: 1; /* Correct line height for icon centering */
+        }
+
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem 2%;
+            }
+            h1 { font-size: 2rem; }
+            h2 { font-size: 1.75rem; }
+            h3 { font-size: 1.5rem; }
+            .section-header { font-size: 2rem; }
+            .navbar-nav { flex-wrap: wrap; justify-content: center !important; }
+            .nav-link { padding: 0.6rem 0.8rem; margin: 5px; }
+            .code-block-header { flex-direction: column; align-items: flex-start; padding: 1rem; }
+            .code-block-header button { margin-top: 10px; width: 100%; }
+            .ai-explain-button { margin-left: 0; margin-top: 5px; } /* Adjust for stacking on mobile */
+            .fab-ai-assistant {
+                width: 50px;
+                height: 50px;
+                font-size: 1.8rem;
+                bottom: 15px;
+                right: 15px;
+            }
+            .search-bar-container {
+                padding: 0.5rem 0.5rem; /* Adjust padding for mobile */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="text-center section-header">Technical Deep Dive: Audit Log Implementation for IW SpudWrench Project</h1>
+        <p class="text-center text-muted mb-4">Document Version: 1.0 | Date: June 19, 2025</p>
+
+        <nav class="navbar navbar-expand-lg navbar-light bg-light rounded shadow-sm mb-4">
+            <div class="container-fluid">
+                <span class="navbar-brand">Sections:</span>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav nav-pills w-100 justify-content-around">
+                        <li class="nav-item"><a class="nav-link" href="#introduction">Introduction</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#challenges">Challenges</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#architecture">Architecture</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#project-structure">Project Structure</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#data-model">Data Model</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#components">Components</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#integration">Integration</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#configuration-section">Configuration</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#key-principles">Design Principles</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#future-enhancements">Future</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#technical-assistant">AI Assistant</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <!-- New: Page Search Bar -->
+        <div class="search-bar-container rounded shadow-sm">
+            <input type="text" id="page-search-input" class="form-control search-input" placeholder="Search this document..." aria-label="Search this document">
+            <div id="search-results-info" class="text-end text-muted mt-2 small"></div>
+        </div>
+
+        <section id="introduction" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">1. Introduction</h2>
+            <p>This document provides a detailed technical overview of the custom audit logging solution implemented for the IW SpudWrench Project. It outlines the architecture, explains the role and implementation of each component, and delves into the specific patterns used to address the challenges of integrating robust auditing within an established <strong>.NET Framework 4.6.2</strong> application utilizing <strong>Entity Framework 6</strong> and the <code>Repository.Pattern.Ef6</code> library.</p>
+            <p>The solution aims to provide a comprehensive audit trail for both data modifications (Create, Update, Delete) and critical application access (View) events, ensuring data integrity, traceability, and compliance.</p>
+        </section>
+
+        <section id="challenges" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">2. Core Technical Challenges</h2>
+            <p>Developing a robust audit logging system within an existing enterprise application presents several unique challenges, particularly with the chosen technology stack:</p>
+            <ul>
+                <li><strong>Integration with <code>Repository.Pattern.Ef6</code>:</strong> The application extensively uses <code>Repository.Pattern.Ef6</code>, which abstracts <code>DbContext</code> operations. Integrating a custom audit solution required careful consideration of how to intercept and wrap the core <code>SaveChanges()</code> operations without disrupting existing patterns.</li>
+                <li><strong>"Disconnected" Entity Updates:</strong> Scenarios where entities are detached, modified, and then re-attached to the <code>DbContext</code> can complicate the capture of "original values" (the state before modification). The solution needs to accurately retrieve this previous state.</li>
+                <li><strong>Database-Generated Primary Keys:</strong> For newly added entities, the primary key is often generated by the database only after <code>SaveChanges()</code> is successfully executed. The audit system must capture the audit log initially with a placeholder and then update it with the actual ID post-save.</li>
+                <li><strong>Ensuring Atomic Transactions:</strong> It's critical that data changes in the main application database and their corresponding audit log entries in the audit database are committed or rolled back together. This requires a robust transactional mechanism.</li>
+                <li><strong>Preventing Recursive Auditing:</strong> The act of saving audit logs should not, in turn, trigger new audit logs, which could lead to an infinite loop. A mechanism to suppress auditing during audit log persistence is essential.</li>
+                <li><strong>User and Context Information:</strong> Reliably capturing the authenticated user's identity and the application context (e.g., accessed URL or menu option) for each audit entry, especially across asynchronous operations, is vital for a meaningful audit trail.</li>
+            </ul>
+        </section>
+
+        <section id="architecture" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">3. Overall Architecture & Data Flow</h2>
+            <p>The audit logging solution intercepts the <code>SaveChanges()</code> and <code>SaveChangesAsync()</code> calls of the main application <code>DbContext</code>. It performs a multi-stage process to capture, prepare, and persist audit records within an atomic transaction. Additionally, it provides a mechanism for logging application access events.</p>
+            
+            <h3 class="mt-4">3.1. High-Level Audit Flow Diagram</h3>
+            <div class="mermaid-diagram-container">
+                <pre class="mermaid">
+
+graph TD
+    A[Application Layer] --> B[Service Layer / Controller]
+    B -->|Calls SaveChanges or SaveChangesAsync| C["IronWorkersDbContext<br/>Overrides SaveChanges"]
+    C -->|Delegates to| D[IWITSAuditService]
+    D -->|1 Capture Changes Pre-Save| E[IWITSAuditConfigurator]
+    E --> F{Entities: Added, Modified, Deleted}
+    F -->|Added & Modified Data| D
+    F -->|Deleted Data| D
+    D -->|2 Load Original Data for Modified| G[Temporary DbContext<br/>Queries Main DB]
+    G -->|Retrieves Previous State| D
+    D -->|3 Execute Main Data Save| H[base.SaveChanges or Async]
+    H -->|DB-Generated IDs & Success/Failure| D
+    D -->|4 Resolve IDs for Added| I[Update Audit Logs in memory]
+    D -->|5 Persist Audit Logs| J[AuditLogDbContext]
+    J -->|Saves to| K[NewAuditLogs Table<br/>in Main DB]
+    J -->|Uses| L[AuditSuppressionContext]
+    L -->|Prevents| J
+    D -->|Atomicity Ensured by| M[TransactionScope]
+    M -->|Commits/Rolls Back| H
+    M -->|Commits/Rolls Back| J
+    N[Application Access Events<br/>e.g., MVC Controller Action] --> O[AuditAccessAttribute]
+    O -->|Logs on ActionExecuted| P[AuditLogDbContext]
+    P -->|Saves to| K
+    P -->|Uses| L
+    
+    subgraph DataFlow ["Data Flow"]
+        E -.-> F
+        F -.-> D
+        G -.-> D
+        H -.-> D
+        I -.-> D
+        J -.-> K
+        O -.-> P
+        P -.-> K
+    end
+                </pre>
+            </div>
+            <div class="explanation">
+                <p>This diagram illustrates the multi-stage process for data change auditing and the separate path for access logging:</p>
+                <ul>
+                    <li><strong>(1) Capture Changes (Pre-Save):</strong> Before the main database operation, <code>IWITSAuditConfigurator</code> identifies all added, modified, and deleted entities via the <code>DbContext.ChangeTracker</code>. It creates initial <code>NewAuditLogs</code> entries. For "Added" entities, temporary IDs are used. For "Modified" entities, <code>PreviousData</code> is initially left empty.</li>
+                    <li><strong>(2) Load Original Data (for Modified):</strong> For modified entities, <code>IWITSAuditService</code> explicitly fetches their original state directly from the main database using a temporary <code>DbContext</code>. This ensures accurate <code>PreviousData</code> capture, especially for disconnected scenarios.</li>
+                    <li><strong>(3) Execute Main Data Save:</strong> The original <code>base.SaveChanges()</code> or <code>SaveChangesAsync()</code> of the application's <code>DbContext</code> is invoked, persisting the primary business data changes.</li>
+                    <li><strong>(4) Resolve DB-Generated IDs:</strong> After the main save, the actual database-generated IDs for newly added entities are available. The in-memory <code>NewAuditLogs</code> entries are updated with these real IDs.</li>
+                    <li><strong>(5) Persist Audit Logs:</strong> All collected and updated <code>NewAuditLogs</code> are then saved to the dedicated <code>NewAuditLogs</code> table using a separate <code>AuditLogDbContext</code> instance.</li>
+                    <li><strong>Transactional Integrity:</strong> All these stages for data change auditing (from initiating the main save to persisting audit logs) are wrapped within a <code>TransactionScope</code>, guaranteeing atomicity. If any step fails, the entire transaction is rolled back.</li>
+                    <li><strong>Access Logging:</strong> Separately, the <code>AuditAccessAttribute</code>, applied to MVC controller actions, logs "View" events directly to the <code>NewAuditLogs</code> table.</li>
+                    <li><strong>Self-Auditing Prevention:</strong> The <code>AuditSuppressionContext</code> is used during the persistence of audit logs to prevent recursive auditing.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="project-structure" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">4. Project Structure & Modularity</h2>
+            <p>The audit logging solution is designed with a modular approach, distributed across several dedicated class library projects. This promotes clear separation of concerns, reusability, maintainability, and testability. Each namespace typically corresponds to a class library project within the solution.</p>
+            <ul>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Config</code>: Contains configuration logic, such as <code>IWITSAuditConfigurator</code> for initial audit data capture.</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Data.DbContexts</code>: Houses the dedicated <code>DbContext</code> for the audit logs themselves (<code>AuditLogDbContext</code>).</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Entities</code>: Defines the core entity models used by the auditing system (e.g., <code>NewAuditLogs</code>).</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Filters</code>: Contains ASP.NET MVC-specific action filters for auditing purposes (e.g., <code>AuditAccessAttribute</code>).</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Helpers</code>: Provides utility and helper classes, such as <code>AuditSuppressionContext</code> and <code>EntityIdHelper</code>.</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Infrastructure</code>: Contains foundational elements like factories and concrete implementations of interfaces that bridge different parts of the system (e.g., <code>DbContextAuditServiceFactory</code>, <code>HttpContextProvider</code>).</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Interfaces</code>: Defines contracts (interfaces) for various components, enabling loose coupling and dependency injection (e.g., <code>IHttpContextProvider</code>).</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Model</code>: Holds simple data models or Data Transfer Objects (DTOs) used within the auditing infrastructure (e.g., <code>AuditCaptureResult</code>).</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Service</code>: Encapsulates the core business logic and orchestration of the auditing process (e.g., <code>IWITSAuditService</code>).</li>
+                <li><code>IronWorkers.IWITS.DbService</code>: Manages the creation of various application <code>DbContext</code> instances, acting as a central provider for data contexts.</li>
+            </ul>
+            <div class="explanation">
+                <p>This structure ensures that each functional area of the audit system is self-contained, with well-defined interfaces and minimal direct dependencies. For instance, the core <code>IWITSAuditService</code> depends on an interface (<code>IHttpContextProvider</code>) rather than a concrete implementation of <code>HttpContext</code>, enhancing testability and flexibility for future changes.</p>
+            </div>
+        </section>
+
+        <section id="data-model" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">5. Data Model</h2>
+            <p>The central data model for all audit entries is the <code>NewAuditLogs</code> entity. This entity captures comprehensive details about each audited event.</p>
+
+            <h3>5.1. NewAuditLogs Entity <button class="ai-explain-button" data-component-title="NewAuditLogs Entity"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Entities/NewAuditLogs.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using Dapper.Contrib.Extensions; // Required for [Computed] attribute
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Entities
+{
+    /// <summary>
+    /// Represents a single audit log entry, capturing modifications to data or access events
+    /// within the IW SpudWrench Project. This entity is designed to store comprehensive
+    /// details about each audited action.
+    /// </summary>
+    /// <remarks>
+    /// This class maps directly to the 'NewAuditLogs' table in the audit database.
+    /// It uses Entity Framework data annotations for database schema mapping and validation.
+    /// The 'AuditId' is set to be database-generated (IDENTITY column).
+    /// The [Dapper.Contrib.Extensions.Computed] attribute ensures Dapper.Contrib operations
+    /// (if used for direct audit log inserts) correctly handle the auto-generated ID,
+    /// preventing it from being included in INSERT/UPDATE statements.
+    /// 'PreviousData' and 'NewData' fields are stored as NVARCHAR(MAX) to accommodate
+    /// JSON serialized object states, allowing for flexible and detailed data capture.
+    /// </remarks>
+    [Table("NewAuditLogs")]
+    public class NewAuditLogs
+    {
+        /// <summary>
+        /// Gets or sets the unique identifier for the audit log entry.
+        /// This is the primary key and is automatically generated by the database upon insertion.
+        /// </summary>
+        [Key] 
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        [Computed] // Indicates to Dapper.Contrib that this column is database-generated and should not be included in inserts/updates.
+        public int AuditId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the name of the object (entity type, table, or controller) that was modified or accessed.
+        /// This provides context on which part of the system was affected by the audit event.
+        /// </summary>
+        [Required] 
+        [StringLength(255)]
+        public string ObjectName { get; set; } // Entity type name (e.g., "User", "Product") or Controller name
+
+        /// <summary>
+        /// Gets or sets the primary key or unique identifier of the record that was changed or accessed.
+        /// For data changes, this is the ID of the affected record.
+        /// For access logs, this might be a generic identifier like "Data fetching" or "User Login".
+        /// Stored as a string to accommodate various primary key types (e.g., INT, GUID, composite keys).
+        /// </summary>
+        [Required]
+        [Column(TypeName = "NVARCHAR(MAX)")] // Use NVARCHAR(MAX) for potentially long string IDs or composite IDs.
+        public string ObjectId { get; set; } // Primary key of changed record or relevant identifier for access log
+
+        /// <summary>
+        /// Gets or sets the type of change operation performed.
+        /// 'C' for Create, 'U' for Update, 'D' for Delete, 'V' for View (for access logging).
+        /// </summary>
+        [Required]
+        [StringLength(1)]
+        public string ChangeType { get; set; } // C=Create, U=Update, D=Delete, V=View (Access)
+
+        /// <summary>
+        /// Gets or sets the JSON representation of the data state before the change occurred.
+        /// This field is crucial for understanding what values were present prior to modification or deletion.
+        /// This will be an empty JSON object "{}" for 'Create' operations, and dynamically loaded for 'Update' operations.
+        /// </summary>
+        [Column(TypeName = "NVARCHAR(MAX)")] // Stores JSON string, can be large.
+        public string PreviousData { get; set; } // JSON of data before change
+
+        /// <summary>
+        /// Gets or sets the JSON representation of the data state after the change occurred.
+        /// This field captures the new values for 'Create' and 'Update' operations,
+        /// and the state of the entity at the time of 'Delete' operations.
+        /// </summary>
+        [Required] // NewData must always be present.
+        [Column(TypeName = "NVARCHAR(MAX)")] // Stores JSON string, can be large.
+        public string NewData { get; set; } // JSON of data after change
+
+        /// <summary>
+        /// Gets or sets the identifier of the user who performed the data modification or access.
+        /// This is typically the authenticated user's ID or username retrieved from the HTTP context.
+        /// </summary>
+        [Required]
+        [StringLength(255)]
+        public string ModifiedBy { get; set; } // User who made the change (User ID or Name)
+
+        /// <summary>
+        /// Gets or sets the UTC timestamp when the audit event occurred.
+        /// Using UTC ensures consistent timekeeping across different servers and time zones.
+        /// </summary>
+        [Required]
+        public DateTime ModifiedDate { get; set; } // UTC timestamp of the audit event
+
+        /// <summary>
+        /// Gets or sets the application context or menu option from which the change/access was initiated.
+        /// This helps in tracing the user's workflow or the specific application area that triggered the event.
+        /// For access logs, this is typically the URL or route.
+        /// </summary>
+        [Required]
+        [StringLength(500)]
+        public string MenuOption { get; set; } // Application context or URL/Route
+
+        /// <summary>
+        /// Gets or sets any additional remarks or notes associated with the audit log entry.
+        /// This can be used for custom messages, error details, or specific business context.
+        /// </summary>
+        [StringLength(150)]
+        public string Remarks { get; set; } // Additional notes or custom messages
+    }
+}</code></pre>
+            </div>
+        </section>
+
+        <section id="components" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">6. Core Components & Responsibilities</h2>
+            <p>The audit infrastructure is built upon several interconnected components, each with a specific role in ensuring comprehensive and reliable logging.</p>
+
+            <h3>6.1. IWITSAuditConfigurator <button class="ai-explain-button" data-component-title="IWITSAuditConfigurator"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Config/IWITSAuditConfigurator.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using IronWorkers.IWITS.AuditInfrastructure.Entities;
+using IronWorkers.IWITS.AuditInfrastructure.Helpers; // For EntityIdHelper
+using IronWorkers.IWITS.AuditInfrastructure.Model;   // For AuditCaptureResult
+using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.Data.Entity;
+using System.Dynamic; // For ExpandoObject
+using System.Linq;
+using System.Web; // For HttpContext.Current
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Config
+{
+    /// <summary>
+    /// Static class responsible for capturing changes from a DbContext's ChangeTracker
+    /// and preparing initial audit log entries. This is the first stage of the auditing process.
+    /// </summary>
+    public static class IWITSAuditConfigurator
+    {
+        /// <summary>
+        /// Captures audit logs for entities that are in Added, Modified, or Deleted states
+        /// within the provided DbContext.
+        /// </summary>
+        /// <param name="dbContext">The main DbContext instance (e.g., IronWorkersDbContext)
+        /// whose changes are to be audited.</param>
+        /// <param name="auditorName">Optional. The name of the user performing the action.
+        /// Defaults to current HttpContext user or "System_Unknown".</param>
+        /// <param name="menuOption">Optional. The application menu option or context
+        /// from which the operation was initiated. Defaults to "Application Operation".</param>
+        /// <returns>An AuditCaptureResult containing the preliminary audit logs
+        /// and lists of entries needing post-save ID/original data resolution.</returns>
+        public static AuditCaptureResult CaptureAuditLogs(
+            DbContext dbContext, 
+            string auditorName = null,
+            string menuOption = "Application Operation")
+        {
+            // Initialize the result object which will hold captured audit logs and entries for post-processing.
+            var result = new AuditCaptureResult();
+            
+            // Determine the current auditor's identity. Prioritizes provided name, then authenticated HTTP context user, then "System_Unknown".
+            string currentAuditor = auditorName ?? HttpContext.Current?.User?.Identity?.Name ?? "System_Unknown";
+            string defaultMenuOption = menuOption;
+
+            // Get all entities tracked by the DbContext that have changed state (Added, Modified, Deleted).
+            // Materialize the list to avoid issues if the ChangeTracker collection is modified during iteration.
+            var changedEntities = dbContext.ChangeTracker.Entries()
+                .Where(e => e.State == EntityState.Added ||
+                            e.State == EntityState.Modified ||
+                            e.State == EntityState.Deleted)
+                .ToList(); 
+
+            foreach (var entry in changedEntities)
+            {
+                // Skip auditing the audit log entity itself to prevent infinite recursion.
+                if (entry.Entity is NewAuditLogs)
+                {
+                    continue; 
+                }
+
+                // Initialize JSON strings for previous and new data.
+                var previousDataJson = "{}"; 
+                var newDataJson = "{}";  
+
+                // Handle entities based on their EntityState.
+                switch (entry.State)
+                {
+                    case EntityState.Added:
+                        // For added entities, the actual database-generated ID is not yet available.
+                        // A temporary GUID is used, and the entry is added to a list for post-save ID update.
+                        string tempEntityId = Guid.NewGuid().ToString(); 
+                        result.AddedEntriesToUpdateId.Add(entry); // Mark this entry for later ID resolution.
+
+                        // Capture all current values as NewData.
+                        var addedNewData = new ExpandoObject() as IDictionary<string, object>;
+                        foreach (var propertyName in entry.CurrentValues.PropertyNames)
+                        {
+                            addedNewData[propertyName] = entry.CurrentValues[propertyName];
+                        }
+                        newDataJson = JsonConvert.SerializeObject(addedNewData) ?? "{}";
+
+                        // Add a preliminary audit log entry for the 'Create' operation.
+                        // PreviousData is empty as there was no prior state.
+                        result.AuditLogs.Add(new NewAuditLogs
+                        {
+                            ObjectName = entry.Entity.GetType().Name,
+                            ObjectId = tempEntityId, // Temporary ID placeholder
+                            ChangeType = "C",
+                            PreviousData = "{}", // New entries have no previous data
+                            NewData = newDataJson,
+                            ModifiedBy = currentAuditor,
+                            ModifiedDate = DateTime.UtcNow,
+                            MenuOption = defaultMenuOption,
+                            Remarks = $"New {entry.Entity.GetType().Name} added (ID will be resolved)."
+                        });
+                        break;
+
+                    case EntityState.Modified:
+                        // For modified entities, the original data needs to be loaded from the database
+                        // after the main SaveChanges to ensure accuracy (especially for disconnected entities).
+                        // This entry is marked for later original value capture.
+                        result.ModifiedEntriesForOriginalValueCapture.Add(entry); 
+                        
+                        // Get the entity's ID from its original values, as it existed before modification.
+                        string modifiedEntityId = EntityIdHelper.GetEntityId(dbContext, entry); 
+
+                        // Capture all current values as NewData.
+                        var modifiedNewData = new ExpandoObject() as IDictionary<string, object>;
+                        foreach (var propertyName in entry.CurrentValues.PropertyNames)
+                        {
+                            modifiedNewData[propertyName] = entry.CurrentValues[propertyName];
+                        }
+                        newDataJson = JsonConvert.SerializeObject(modifiedNewData) ?? "{}";
+
+                        // Add a preliminary audit log entry for the 'Update' operation.
+                        // PreviousData is temporarily empty and will be populated later.
+                        result.AuditLogs.Add(new NewAuditLogs
+                        {
+                            ObjectName = entry.Entity.GetType().Name,
+                            ObjectId = modifiedEntityId ?? "N/A_Modified",
+                            ChangeType = "U",
+                            PreviousData = "{}", // Temporary placeholder; will be loaded in IWITSAuditService
+                            NewData = newDataJson,
+                            ModifiedBy = currentAuditor,
+                            ModifiedDate = DateTime.UtcNow,
+                            MenuOption = defaultMenuOption,
+                            Remarks = $"{entry.Entity.GetType().Name} modified (PreviousData to be loaded)."
+                        });
+                        break;
+
+                    case EntityState.Deleted:
+                        // For deleted entities, both original values are captured as PreviousData,
+                        // and NewData is empty.
+                        string deletedEntityId = EntityIdHelper.GetEntityId(dbContext, entry); 
+                        var deletedPreviousData = new ExpandoObject() as IDictionary<string, object>;
+                        foreach (var propertyName in entry.OriginalValues.PropertyNames)
+                        {
+                            deletedPreviousData[propertyName] = entry.OriginalValues[propertyName];
+                        }
+                        previousDataJson = JsonConvert.SerializeObject(deletedPreviousData) ?? "{}";
+
+                        // Add the audit log entry for the 'Delete' operation.
+                        result.AuditLogs.Add(new NewAuditLogs
+                        {
+                            ObjectName = entry.Entity.GetType().Name,
+                            ObjectId = deletedEntityId ?? "N/A_Deleted",
+                            ChangeType = "D",
+                            PreviousData = previousDataJson,
+                            NewData = "{}", // No new data for deleted entities
+                            ModifiedBy = currentAuditor,
+                            ModifiedDate = DateTime.UtcNow,
+                            MenuOption = defaultMenuOption,
+                            Remarks = $"{entry.Entity.GetType().Name} deleted."
+                        });
+                        break;
+                }
+            }
+
+            // Assign the captured logs to the result object (redundant if adding directly, but ensures it's set).
+            // The `result.AuditLogs` is already being populated in the loop. This line can be removed if direct adds are preferred.
+            // However, keeping it here won't cause issues, it just re-assigns the same list.
+            result.AuditLogs = result.AuditLogs; 
+            return result;
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.2. AuditLogDbContext <button class="ai-explain-button" data-component-title="AuditLogDbContext"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Data.DbContexts/AuditLogDbContext.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using System.Data.Entity; 
+using IronWorkers.IWITS.AuditInfrastructure.Entities; // Reference to the NewAuditLogs entity
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Data.DbContexts
+{
+    /// <summary>
+    /// Represents the dedicated Entity Framework DbContext for the audit log database.
+    /// This context is separate from the main application DbContexts to ensure
+    /// a clear separation of concerns for auditing data.
+    /// </summary>
+    /// <remarks>
+    /// It connects using the "IronWorkersAuditDbContext" connection string defined in the application's configuration.
+    /// This separation helps manage audit data independently, potentially allowing for different
+    /// security, performance, or backup strategies for the audit trail.
+    /// </remarks>
+    public class AuditLogDbContext : DbContext
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AuditLogDbContext"/> class.
+        /// It uses the specified connection string name to connect to the audit database.
+        /// </summary>
+        /// <param name="connectionStringName">The name of the connection string in the configuration file.</param>
+        public AuditLogDbContext() : base("name=IronWorkersAuditDbContext") // Uses the named connection string from web.config
+        {
+            // Constructor is kept simple, relying on base DbContext initialization.
+            // No custom configurations like lazy loading or command timeout are needed here,
+            // as this context is primarily for simple inserts of audit logs.
+        }
+
+        /// <summary>
+        /// Gets or sets the DbSet for <see cref="NewAuditLogs"/> entities.
+        /// This property allows Entity Framework to map the NewAuditLogs class
+        /// to a corresponding table in the audit database.
+        /// </summary>
+        public virtual DbSet&lt;NewAuditLogs&gt; NewAuditLogs { get; set; }
+
+        // Additional DbSets for other audit-related entities could be added here if needed.
+        // For example, if there were manual audit logs or audit log properties as commented out in the original code.
+
+        /// <summary>
+        /// Configures the model for the DbContext.
+        /// This method is called by the Entity Framework Code First infrastructure.
+        /// </summary>
+        /// <param name="modelBuilder">The builder that defines the model for the context.</param>
+        protected override void OnModelCreating(DbModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            // Explicitly map the NewAuditLogs entity to the "NewAuditLogs" table.
+            // This ensures that the table name is as expected, overriding any default pluralization conventions.
+            modelBuilder.Entity&lt;NewAuditLogs&gt;().ToTable("NewAuditLogs");
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.3. IWITSAuditService <button class="ai-explain-button" data-component-title="IWITSAuditService"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Service/IWITSAuditService.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using Dapper.Contrib.Extensions; // Potentially used for direct DB operations, though not explicitly in these methods.
+using IronWorkers.IWITS.AuditInfrastructure.Data.DbContexts; // For AuditLogDbContext
+using IronWorkers.IWITS.AuditInfrastructure.Entities;     // For NewAuditLogs
+using IronWorkers.IWITS.AuditInfrastructure.Helpers;     // For AuditSuppressionContext, EntityIdHelper
+using IronWorkers.IWITS.AuditInfrastructure.Interfaces;  // For IHttpContextProvider
+using IronWorkers.IWITS.AuditInfrastructure.Model;       // For AuditCaptureResult
+using Newtonsoft.Json;                               // For JSON serialization
+using System;
+using System.Collections.Generic;
+using System.Data;                                   // For TransactionScope (IDbConnection/IDbTransaction implicit)
+using System.Data.Entity;                            // For DbContext, DbEntityEntry, EntityState
+using System.Data.Entity.Infrastructure;             // For DbEntityEntry
+using System.Dynamic;                                // For ExpandoObject (dynamic JSON creation)
+using System.Linq;
+using System.Reflection;                             // For reflection to get entity properties
+using System.Threading;
+using System.Threading.Tasks;
+using System.Transactions;                           // For TransactionScope
+using static IronWorkers.IWITS.AuditInfrastructure.Config.IWITSAuditConfigurator; // To access CaptureAuditLogs
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Service
+{
+    /// <summary>
+    /// Central service responsible for orchestrating the audit logging process.
+    /// It intercepts DbContext's SaveChanges operations to inject comprehensive
+    /// audit trail capture, ensuring atomicity with the main database transaction.
+    /// </summary>
+    public class IWITSAuditService
+    {
+        private readonly IHttpContextProvider _httpContextProvider;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="IWITSAuditService"/> class.
+        /// </summary>
+        /// <param name="httpContextProvider">An instance of <see cref="IHttpContextProvider"/>
+        /// to retrieve current HTTP context-related information (user ID, route).</param>
+        public IWITSAuditService(IHttpContextProvider httpContextProvider)
+        {
+            _httpContextProvider = httpContextProvider;
+        }
+
+        /// <summary>
+        /// Intercepts and wraps the synchronous DbContext.SaveChanges() operation
+        /// to include comprehensive audit logging within an atomic transaction.
+        /// </summary>
+        /// <param name="mainDbContext">The primary application DbContext whose changes are being saved.</param>
+        /// <param name="baseSaveChangesAction">A delegate representing the original base.SaveChanges() call.</param>
+        /// <returns>The number of state entries written to the underlying database.</returns>
+        public int SaveChangesAndAudit(DbContext mainDbContext, Func&lt;int&gt; baseSaveChangesAction)
+        {
+            // Retrieve current user ID and route from the HTTP context.
+            var (userId, route) = _httpContextProvider.GetUserIdAndRoute();
+
+            // Use a TransactionScope to ensure atomicity between the main database save
+            // and the audit log persistence. If either fails, both roll back.
+            using (var transaction = new TransactionScope())
+            {
+                // Stage 1: Capture preliminary audit logs BEFORE the main database save.
+                // This identifies all changes (Added, Modified, Deleted entities).
+                AuditCaptureResult captureResult = CaptureAuditLogs(mainDbContext, userId, route);
+                List&lt;NewAuditLogs&gt; auditLogsToSave = captureResult.AuditLogs;
+                List&lt;DbEntityEntry&gt; addedEntriesToUpdateId = captureResult.AddedEntriesToUpdateId;
+                // Note: For synchronous SaveChanges, ModifiedEntriesForOriginalValueCapture is handled
+                // differently or less robustly in the provided config, but the async version addresses it.
+
+                // Stage 2: Execute the actual base SaveChanges operation for the main database.
+                // This commits the primary business data changes and populates database-generated IDs
+                // for newly added entities.
+                int result = baseSaveChangesAction(); 
+
+                // Stage 3: POST-SAVE ID UPDATE FOR ADDED ENTITIES.
+                // After the main save, resolve temporary IDs for newly added entities with their actual
+                // database-generated primary keys. This updates the in-memory audit logs.
+                UpdateAuditLogsWithGeneratedIds(addedEntriesToUpdateId, auditLogsToSave);
+                
+                // Stage 4: Persist all collected audit logs to the separate audit table.
+                if (auditLogsToSave != null && auditLogsToSave.Any())
+                {
+                    // Use AuditSuppressionContext to prevent the audit logging process from
+                    // generating audit logs for its own save operations (avoiding recursion).
+                    using (AuditSuppressionContext.Begin())
+                    {
+                        // Create a new instance of the AuditLogDbContext to save audit logs.
+                        // This ensures the audit context is independent and clean.
+                        using (var auditDbContext = new AuditLogDbContext())
+                        {
+                            // Add all collected audit logs to the audit context.
+                            auditDbContext.NewAuditLogs.AddRange(auditLogsToSave);
+                            // Save the audit logs to the audit database.
+                            auditDbContext.SaveChanges();
+                        }
+                    }
+                }
+                
+                // Complete the transaction scope. This commits all changes across
+                // enlisted connections (main DB and audit DB).
+                transaction.Complete(); 
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Intercepts and wraps the asynchronous DbContext.SaveChangesAsync() operation
+        /// to include comprehensive audit logging within an atomic transaction.
+        /// Supports asynchronous flow across thread boundaries for the transaction.
+        /// </summary>
+        /// <param name="mainDbContext">The primary application DbContext whose changes are being saved asynchronously.</param>
+        /// <param name="baseSaveChangesAsyncAction">A delegate representing the original base.SaveChangesAsync() call.</param>
+        /// <param name="cancellationToken">A <see cref="CancellationToken"/> to observe while waiting for the task to complete.</param>
+        /// <returns>A task that represents the asynchronous save operation, returning the number of state entries written.</returns>
+        public async Task&lt;int&gt; SaveChangesAndAuditAsync(DbContext mainDbContext, 
+            Func&lt;Task&lt;int&gt;&gt; baseSaveChangesAsyncAction, CancellationToken cancellationToken)
+        {
+            // Enable asynchronous flow for the TransactionScope.
+            // This is crucial for transactions to correctly span across 'await' calls.
+            using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+            {
+                // Retrieve current user ID and route from the HTTP context.
+                var (userId, route) = _httpContextProvider.GetUserIdAndRoute();
+
+                // Stage 1: Capture preliminary audit logs BEFORE the main database save.
+                // This identifies all changes (Added, Modified, Deleted entities).
+                AuditCaptureResult captureResult = CaptureAuditLogs(mainDbContext, userId, route);
+
+                List&lt;NewAuditLogs&gt; auditLogsToSave = captureResult.AuditLogs;
+                List&lt;DbEntityEntry&gt; addedEntriesToUpdateId = captureResult.AddedEntriesToUpdateId;
+                
+                // Stage 2: Load original data for Modified entities BEFORE the main async save.
+                // This ensures 'PreviousData' accurately reflects the state prior to the current transaction.
+                await UpdateAuditLogsWithOriginalDataAsync(mainDbContext, captureResult.ModifiedEntriesForOriginalValueCapture, auditLogsToSave, cancellationToken);
+
+                // Stage 3: Execute the actual base async SaveChanges operation for the main database.
+                // This commits the primary business data changes and populates database-generated IDs
+                // for newly added entities.
+                int result = await baseSaveChangesAsyncAction(); 
+
+                // Stage 4: POST-SAVE ID UPDATE FOR ADDED ENTITIES.
+                // After the main save, resolve temporary IDs for newly added entities with their actual
+                // database-generated primary keys. This updates the in-memory audit logs.
+                UpdateAuditLogsWithGeneratedIds(addedEntriesToUpdateId, auditLogsToSave);
+                
+                // Stage 5: Asynchronously persist all collected audit logs to the separate audit table.
+                if (auditLogsToSave != null && auditLogsToSave.Any())
+                {
+                    // Use AuditSuppressionContext to prevent the audit logging process from
+                    // generating audit logs for its own save operations (avoiding recursion).
+                    using (AuditSuppressionContext.Begin())
+                    {
+                        // Create a new instance of the AuditLogDbContext to save audit logs.
+                        // This ensures the audit context is independent and clean.
+                        using (var auditDbContext = new AuditLogDbContext())
+                        {
+                            // Add all collected audit logs to the audit context.
+                            auditDbContext.NewAuditLogs.AddRange(auditLogsToSave);
+                            // Save the audit logs to the audit database asynchronously.
+                            await auditDbContext.SaveChangesAsync(cancellationToken);
+                        }
+                    }
+                }
+                
+                // Complete the transaction scope. This commits all changes across
+                // enlisted connections (main DB and audit DB).
+                transaction.Complete(); // Commit the transaction if all succeeds
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously loads the original data for modified entities from the database
+        /// and populates the 'PreviousData' field in their corresponding audit log entries.
+        /// This is crucial for accurate 'before' state capture, especially for disconnected entities.
+        /// </summary>
+        /// <param name="mainDbContext">The main application DbContext to infer connection string and entity types.</param>
+        /// <param name="modifiedEntries">A list of <see cref="DbEntityEntry"/> for entities that were modified.</param>
+        /// <param name="auditLogs">The list of <see cref="NewAuditLogs"/> containing the preliminary audit entries.</param>
+        /// <param name="cancellationToken">A <see cref="CancellationToken"/> to observe while waiting for the task to complete.</param>
+        private async Task UpdateAuditLogsWithOriginalDataAsync(DbContext mainDbContext, List&lt;DbEntityEntry&gt; modifiedEntries, List&lt;NewAuditLogs&gt; auditLogs, CancellationToken cancellationToken)
+        {
+            foreach (var entry in modifiedEntries)
+            {
+                var entityType = entry.Entity.GetType();
+                // Get the entity's ID. EntityIdHelper.GetEntityIdAfterSave is used here to ensure
+                // we get the correct ID property value after it has been potentially loaded or set.
+                string entityId = EntityIdHelper.GetEntityIdAfterSave(entry); 
+
+                if (!string.IsNullOrEmpty(entityId))
+                {
+                    // Find the corresponding audit log entry for this modified entity.
+                    // The ObjectId is temporary from CaptureAuditLogs and will match the entity's ID.
+                    var auditLog = auditLogs.FirstOrDefault(al => al.ChangeType == "U" && al.ObjectName == entityType.Name && al.ObjectId == entityId);
+
+                    if (auditLog != null)
+                    {
+                        try
+                        {
+                            // Create a new, transient DbContext instance to fetch the original entity.
+                            // This ensures the lookup does not interfere with the main DbContext's change tracker
+                            // or enlist in the ongoing transaction scope prematurely.
+                            using (var tempDbContext = (DbContext)Activator.CreateInstance(mainDbContext.GetType(), mainDbContext.Database.Connection.ConnectionString))
+                            {
+                                // Disable change tracking and lazy loading for this temporary context,
+                                // as its sole purpose is to fetch data efficiently without tracking overhead.
+                                tempDbContext.Configuration.AutoDetectChangesEnabled = false; 
+                                tempDbContext.Configuration.LazyLoadingEnabled = false;
+
+                                // Asynchronously find the original entity by its primary key(s) from the database.
+                                object originalEntity = await tempDbContext.Set(entityType).FindAsync(cancellationToken, EntityIdHelper.ConvertIdStringToKey(entityType, entityId)); 
+
+                                if (originalEntity != null)
+                                {
+                                    // Serialize the original entity's public properties to JSON.
+                                    var originalData = new ExpandoObject() as IDictionary<string, object>;
+                                    foreach (var prop in entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead))
+                                    {
+                                        originalData[prop.Name] = prop.GetValue(originalEntity);
+                                    }
+                                    // Assign the JSON string to the PreviousData field of the audit log.
+                                    auditLog.PreviousData = JsonConvert.SerializeObject(originalData) ?? "{}";
+                                    auditLog.Remarks = $"{entityType.Name} modified. ID: {entityId}";
+                                }
+                                else
+                                {
+                                    // Handle cases where the original entity might not be found (e.g., race condition or external deletion).
+                                    auditLog.PreviousData = "{}"; 
+                                    auditLog.Remarks = $"{entityType.Name} modified. Original entity not found. ID: {entityId}";
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log any errors that occur during the retrieval of original data.
+                            System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load original entity {entityType.Name} with ID {entityId} for audit: {ex.Message}");
+                            // Store error message in PreviousData for auditability of the failure.
+                            auditLog.PreviousData = $"{{ \"Error\": \"Failed to load original data: {ex.Message.Replace("\"", "'")}\" }}";
+                            auditLog.Remarks = $"{entityType.Name} modified. Error loading previous data. ID: {entityId}. Error: {ex.Message.Substring(0, Math.Min(ex.Message.Length, 50))}...";
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Updates the in-memory audit log entries for newly added entities with their
+        /// actual database-generated primary keys after the main SaveChanges operation.
+        /// </summary>
+        /// <param name="addedEntries">A list of <see cref="DbEntityEntry"/> for entities that were newly added.</param>
+        /// <param name="auditLogs">The list of <see cref="NewAuditLogs"/> containing the preliminary audit entries.</param>
+        private void UpdateAuditLogsWithGeneratedIds(List&lt;DbEntityEntry&gt; addedEntries, List&lt;NewAuditLogs&gt; auditLogs)
+        {
+            foreach (var entry in addedEntries)
+            {
+                // Retrieve the newly generated ID from the entity after SaveChanges.
+                string newId = EntityIdHelper.GetEntityIdAfterSave(entry);
+
+                if (!string.IsNullOrEmpty(newId))
+                {
+                    // Find the corresponding 'Create' audit log entry using temporary ID/placeholder
+                    // and entity type, then update its ObjectId with the real ID.
+                    var matchingAuditLog = auditLogs.FirstOrDefault(log =>
+                        log.ChangeType == "C" && // Only look for 'Created' logs
+                        log.ObjectName == entry.Entity.GetType().Name && // Match by entity type name
+                        // Look for logs that still have temporary GUIDs or placeholders.
+                        (log.ObjectId == null || Guid.TryParse(log.ObjectId, out _))); 
+
+                    if (matchingAuditLog != null)
+                    {
+                        matchingAuditLog.ObjectId = newId;
+                        matchingAuditLog.Remarks = $"New {matchingAuditLog.ObjectName} added with ID: {newId}.";
+                    }
+                    else
+                    {
+                        // Log a warning if a matching audit log for a new entity isn't found.
+                        // This indicates a potential discrepancy in audit log capture.
+                        System.Diagnostics.Debug.WriteLine($"[WARNING] No matching audit log found for newly added entity {entry.Entity.GetType().Name} with ID {newId} during post-save update.");
+                    }
+                }
+                else
+                {
+                    // Log a warning if the new ID for an added entity could not be retrieved.
+                    System.Diagnostics.Debug.WriteLine($"[WARNING] New ID for added entity {entry.Entity.GetType().Name} could not be retrieved after save.");
+                }
+            }
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.4. AuditAccessAttribute <button class="ai-explain-button" data-component-title="AuditAccessAttribute"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Filters/AuditAccessAttribute.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using IronWorkers.IWITS.AuditInfrastructure.Data.DbContexts; // For AuditLogDbContext
+using IronWorkers.IWITS.AuditInfrastructure.Entities;     // For NewAuditLogs
+using IronWorkers.IWITS.AuditInfrastructure.Helpers;     // For AuditSuppressionContext
+using System;
+using System.Security.Claims; // For ClaimsIdentity and ClaimTypes
+using System.Web;           // For HttpContext.Current
+using System.Web.Mvc;       // For ActionFilterAttribute
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Filters
+{
+    /// <summary>
+    /// An ASP.NET MVC Action Filter Attribute used to log application access events.
+    /// When applied to a controller action, it creates an audit log entry
+    /// indicating that the action was executed.
+    /// </summary>
+    /// <remarks>
+    /// This attribute captures user identity, the accessed route, and customizable remarks.
+    /// It uses <see cref="AuditSuppressionContext"/> to prevent recursive auditing
+    /// when saving its own audit log entry.
+    /// </remarks>
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)] // Can only be applied to methods, once per method.
+    public class AuditAccessAttribute : ActionFilterAttribute
+    {
+        /// <summary>
+        /// Gets or sets a custom remark for the audit log entry.
+        /// If not provided, a default remark "Accessed {route}" is used.
+        /// </summary>
+        public string Remarks { get; set; }
+
+        /// <summary>
+        /// Gets or sets the application menu option for the audit log entry.
+        /// Note: In the current implementation, 'MenuOption' in the audit log
+        /// is populated by the accessed route, not this property.
+        /// This property might be a legacy or intended for future use.
+        /// </summary>
+        public string MenuOptions { get; set; } // Property exists but is not used in the current OnActionExecuted logic for MenuOption.
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AuditAccessAttribute"/> class.
+        /// </summary>
+        public AuditAccessAttribute()
+        {
+            // Default constructor.
+        }
+
+        /// <summary>
+        /// Called by the ASP.NET MVC framework after the action method executes.
+        /// This is where the access audit log entry is created and persisted.
+        /// </summary>
+        /// <param name="filterContext">The context for the executed action.</param>
+        public override void OnActionExecuted(ActionExecutedContext filterContext)
+        {
+            // Retrieve user information from the current HTTP context.
+            var user = filterContext.HttpContext.User;
+            string userName = user?.Identity?.IsAuthenticated == true ? user.Identity.Name : "Anonymous";
+            string userId = "N/A"; // Default for userId
+
+            // Attempt to get a more specific userId from claims if available (e.g., from ASP.NET Identity).
+            var identity = filterContext.HttpContext.User?.Identity as ClaimsIdentity;
+            if (identity != null)
+            {
+                userId = identity.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? // Standard User ID claim
+                         identity.FindFirst("sub")?.Value ??                   // "sub" claim often used in OpenID Connect
+                         userId; // Fallback to "N/A" or previously set userId if claims not found.
+            }
+
+            // Determine the route/URL that was accessed.
+            string route = filterContext.HttpContext.Request?.Url?.PathAndQuery ?? "UnknownRoute";
+
+            // Construct the remarks for the audit log. Prioritizes custom 'Remarks' property.
+            string remarks = !string.IsNullOrWhiteSpace(Remarks) ? Remarks : $"Accessed {route}";
+
+            // Use AuditSuppressionContext to temporarily disable auditing for the current thread/async flow.
+            // This prevents the act of saving this access audit log from triggering another audit log entry.
+            using (AuditSuppressionContext.Begin()) 
+            {
+                try
+                {
+                    // Create a new instance of AuditLogDbContext to save the access log.
+                    // This ensures independence from any ongoing main DbContext transactions.
+                    using (var context = new AuditLogDbContext())
+                    {
+                        // Create a new audit log entry for the access event.
+                        var auditLog = new NewAuditLogs
+                        {
+                            ObjectName = filterContext.ActionDescriptor.ControllerDescriptor.ControllerName, // Controller name as ObjectName
+                            ObjectId = userId, // Using userId as ObjectId for access logs
+                            ChangeType = "V",  // 'V' for View/Access operation
+                            PreviousData = "{}", // No "previous" data for an access log
+                            NewData = "{}",    // No "new" data for an access log
+                            ModifiedBy = userId,
+                            ModifiedDate = DateTime.UtcNow,
+                            MenuOption = route,  // The full route as MenuOption
+                            Remarks = remarks
+                        };
+
+                        // Add the audit log entry to the DbSet and save it immediately.
+                        context.Set&lt;NewAuditLogs&gt;().Add(auditLog);
+                        context.SaveChanges();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log any exceptions that occur during access auditing.
+                    // IMPORTANT: In a production environment, this should use a proper logging framework
+                    // (e.g., Serilog, NLog) to avoid silent failures and ensure audit integrity.
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to write access audit log for user {userId} on route {route}: {ex.Message}");
+                    // Consider re-throwing or handling the exception based on criticality.
+                }
+            }
+            
+            // Call the base OnActionExecuted to ensure other filters in the pipeline are executed.
+            base.OnActionExecuted(filterContext);
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.5. AuditSuppressionContext <button class="ai-explain-button" data-component-title="AuditSuppressionContext"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Helpers/AuditSuppressionContext.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using System;
+using System.Threading; // Required for AsyncLocal
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Helpers
+{
+    /// <summary>
+    /// Provides a mechanism to temporarily suppress global auditing within an asynchronous control flow.
+    /// This is crucial to prevent the auditing system from recursively auditing its own operations
+    /// (e.g., when saving an audit log, it shouldn't trigger another audit log).
+    /// </summary>
+    /// <remarks>
+    /// Utilizes <see cref="AsyncLocal{T}"/> to ensure the suppression flag propagates correctly
+    /// across 'await' calls and asynchronous operations.
+    /// </remarks>
+    public static class AuditSuppressionContext 
+    {
+        // AsyncLocal&lt;bool&gt; stores a boolean value that is local to the current asynchronous control flow.
+        // This means its value will correctly flow across async/await boundaries.
+        private static readonly AsyncLocal&lt;bool&gt; _suppressGlobalAudit = new AsyncLocal&lt;bool&gt;();
+
+        /// <summary>
+        /// Gets or sets a value indicating whether global auditing is currently suppressed for the
+        /// current asynchronous control flow.
+        /// </summary>
+        public static bool IsSuppressed
+        {
+            get => _suppressGlobalAudit.Value;
+            set => _suppressGlobalAudit.Value = value;
+        }
+
+        /// <summary>
+        /// Initiates a suppression scope. When used with a 'using' statement, it temporarily
+        /// sets <see cref="IsSuppressed"/> to true, and automatically resets it to false
+        /// when the 'using' block is exited.
+        /// </summary>
+        /// <returns>An <see cref="IDisposable"/> object that, when disposed,
+        /// restores the previous suppression state.</returns>
+        public static IDisposable Begin()
+        {
+            _suppressGlobalAudit.Value = true; // Set suppression to true for the current context.
+            return new SuppressionScope();     // Return a disposable object to manage the scope.
+        }
+
+        /// <summary>
+        /// A private nested class that implements <see cref="IDisposable"/>.
+        /// Its Dispose method is called automatically when the 'using' block from <see cref="Begin"/>
+        /// is exited, ensuring the audit suppression flag is reset.
+        /// </summary>
+        private class SuppressionScope : IDisposable
+        {
+            /// <summary>
+            /// Resets the <see cref="IsSuppressed"/> flag to false when the scope is exited,
+            /// restoring normal auditing behavior.
+            /// </summary>
+            public void Dispose()
+            {
+                _suppressGlobalAudit.Value = false; // Reset suppression to false.
+            }
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.6. IHttpContextProvider & HttpContextProvider <button class="ai-explain-button" data-component-title="IHttpContextProvider & HttpContextProvider"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Interfaces/IHttpContextProvider.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using System;
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Interfaces
+{
+    /// <summary>
+    /// Defines a contract for retrieving HTTP context-related information,
+    /// specifically the user ID and the current request route.
+    /// This abstraction promotes testability and decoupling by avoiding direct
+    /// dependencies on static `HttpContext.Current`.
+    /// </summary>
+    public interface IHttpContextProvider
+    {
+        /// <summary>
+        /// Retrieves the user ID and the current request route from the HTTP context.
+        /// </summary>
+        /// <returns>A tuple containing the user ID (string) and the route (string).</returns>
+        (string userId, string route) GetUserIdAndRoute();
+    }
+}</code></pre>
+            </div>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Infrastructure/HttpContextProvider.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using IronWorkers.IWITS.AuditInfrastructure.Interfaces; // For IHttpContextProvider
+using System;
+using System.Security.Claims; // For ClaimsIdentity, ClaimTypes
+using System.Web;           // For HttpContext.Current
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Infrastructure
+{
+    /// <summary>
+    /// Provides a concrete implementation of <see cref="IHttpContextProvider"/>
+    /// by accessing the static <see cref="HttpContext.Current"/> to retrieve
+    /// user identity and request route information.
+    /// </summary>
+    /// <remarks>
+    /// This class acts as an adapter for legacy ASP.NET `HttpContext` access,
+    /// allowing its information to be injected and consumed by other services
+    /// that depend on the `IHttpContextProvider` interface.
+    /// </remarks>
+    public class HttpContextProvider : IHttpContextProvider
+    {
+        /// <summary>
+        /// Retrieves the current user's ID and the absolute path of the current HTTP request.
+        /// It attempts to get the user ID from claims-based identity first, falling back to
+        /// username or "Anonymous" if not available.
+        /// </summary>
+        /// <returns>A tuple where Item1 is the user ID and Item2 is the request route.</returns>
+        public (string userId, string route) GetUserIdAndRoute()
+        {
+            var context = HttpContext.Current; // Get the current HTTP context.
+            string userId = "Anonymous";       // Default user ID if not authenticated or found.
+            string route = "UnknownRoute";     // Default route if not available.
+
+            if (context != null) // Ensure HTTP context is available (e.g., not in a background thread without context).
+            {
+                var user = context.User;
+                if (user?.Identity?.IsAuthenticated == true)
+                {
+                    // Start with the authenticated identity's name.
+                    userId = user.Identity.Name; 
+
+                    // If it's a ClaimsIdentity, try to get a more robust user ID from claims.
+                    if (user.Identity is ClaimsIdentity identity)
+                    {
+                        userId = identity.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? // Standard claim for user's unique identifier.
+                                 identity.FindFirst("sub")?.Value ??                   // Common claim in OAuth/OpenID Connect for subject.
+                                 userId; // Fallback to Identity.Name if specific claims are missing.
+                    }
+                }
+                // Get the absolute path of the request URL.
+                route = context.Request?.Url?.AbsolutePath ?? route; 
+            }
+
+            return (userId, route);
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.7. DbContextAuditServiceFactory <button class="ai-explain-button" data-component-title="DbContextAuditServiceFactory"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Infrastructure/DbContextAuditServiceFactory.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using IronWorkers.IWITS.AuditInfrastructure.Interfaces; // For IHttpContextProvider
+using IronWorkers.IWITS.AuditInfrastructure.Service;    // For IWITSAuditService
+using System;
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Infrastructure
+{
+    /// <summary>
+    /// A static factory class responsible for initializing and providing instances
+    /// of the <see cref="IWITSAuditService"/>. This implements the Factory pattern
+    /// to centralize the creation logic and ensure the service is properly configured
+    /// with its dependencies (e.g., <see cref="IHttpContextProvider"/>).
+    /// </summary>
+    public static class DbContextAuditServiceFactory
+    {
+        // Holds the initialized instance of IHttpContextProvider.
+        private static IHttpContextProvider _httpContextProvider;
+
+        /// <summary>
+        /// Initializes the <see cref="DbContextAuditServiceFactory"/> with the necessary
+        /// HTTP context provider. This method should be called once at application startup.
+        /// </summary>
+        /// <param name="httpContextProvider">The concrete implementation of <see cref="IHttpContextProvider"/>
+        /// to be used by the audit service instances created by this factory.</param>
+        /// <exception cref="InvalidOperationException">Thrown if the factory is initialized more than once.</exception>
+        public static void Initialize(IHttpContextProvider httpContextProvider)
+        {
+            if (_httpContextProvider != null)
+            {
+                // Prevent multiple initializations, which could lead to unexpected behavior
+                // or state management issues in a static factory.
+                throw new InvalidOperationException("DbContextAuditServiceFactory has already been initialized.");
+            }
+            _httpContextProvider = httpContextProvider;
+        }
+
+        /// <summary>
+        /// Creates and returns a new instance of <see cref="IWITSAuditService"/>.
+        /// This method ensures that the audit service is instantiated with its required
+        /// dependencies (currently, the <see cref="IHttpContextProvider"/>).
+        /// </summary>
+        /// <returns>A new instance of <see cref="IWITSAuditService"/>.</returns>
+        /// <exception cref="InvalidOperationException">Thrown if the factory has not been initialized
+        /// by calling <see cref="Initialize"/> first.</exception>
+        public static IWITSAuditService CreateAuditService()
+        {
+            if (_httpContextProvider == null)
+            {
+                // Enforce proper initialization before the factory can be used.
+                throw new InvalidOperationException("DbContextAuditServiceFactory has not been initialized. Call Initialize() in Application_Start.");
+            }
+            // Create a new IWITSAuditService instance, injecting the provided HttpContextProvider.
+            return new IWITSAuditService(_httpContextProvider);
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.8. AuditCaptureResult <button class="ai-explain-button" data-component-title="AuditCaptureResult"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Model/AuditCaptureResult.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using IronWorkers.IWITS.AuditInfrastructure.Entities;     // For NewAuditLogs
+using System.Collections.Generic;
+using System.Data.Entity.Infrastructure; // For DbEntityEntry
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Model
+{
+    /// <summary>
+    /// A data transfer object (DTO) used to encapsulate the results of the
+    /// audit log capturing process performed by <see cref="IWITSAuditConfigurator.CaptureAuditLogs"/>.
+    /// </summary>
+    /// <remarks>
+    /// It holds the preliminary list of audit logs and references to <see cref="DbEntityEntry"/>
+    /// objects that require further processing (e.g., ID resolution for added entities,
+    /// original data retrieval for modified entities) after the main DbContext save operation.
+    /// </remarks>
+    public class AuditCaptureResult
+    {
+        /// <summary>
+        /// Gets or sets the list of <see cref="NewAuditLogs"/> that have been
+        /// preliminarily captured for the current batch of changes.
+        /// </summary>
+        public List&lt;NewAuditLogs&gt; AuditLogs { get; set; }
+
+        /// <summary>
+        /// Gets or sets a list of <see cref="DbEntityEntry"/> objects for entities
+        /// that were in an 'Added' state. These entries' actual primary keys are
+        /// generated by the database upon saving, and their corresponding audit logs
+        /// will need to be updated with these real IDs post-save.
+        /// </summary>
+        public List&lt;DbEntityEntry&gt; AddedEntriesToUpdateId { get; set; } = new List&lt;DbEntityEntry&gt;();
+
+        /// <summary>
+        /// Gets or sets a list of <see cref="DbEntityEntry"/> objects for entities
+        /// that were in a 'Modified' state. The 'PreviousData' for these entities
+        /// needs to be explicitly fetched from the database after the initial audit
+        /// capture (but before the main save completes) to ensure accuracy.
+        /// </summary>
+        public List&lt;DbEntityEntry&gt; ModifiedEntriesForOriginalValueCapture { get; set; } = new List&lt;DbEntityEntry&gt;();
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AuditCaptureResult"/> class.
+        /// Sets up empty lists for audit logs and entity entries needing updates.
+        /// </summary>
+        public AuditCaptureResult()
+        {
+            // Initialize AuditLogs list upon creation to avoid NullReferenceExceptions.
+            AuditLogs = new List&lt;NewAuditLogs&gt;();
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>6.9. EntityIdHelper <button class="ai-explain-button" data-component-title="EntityIdHelper"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.AuditInfrastructure.Helpers/EntityIdHelper.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations; // For KeyAttribute
+using System.Data.Entity;                   // For DbContext, EntityState
+using System.Data.Entity.Core.Metadata.Edm; // For EntityType, DataSpace
+using System.Data.Entity.Infrastructure;    // For DbEntityEntry, IObjectContextAdapter
+using System.Linq;
+using System.Reflection;                    // For PropertyInfo
+
+namespace IronWorkers.IWITS.AuditInfrastructure.Helpers
+{
+    /// <summary>
+    /// Helper class for retrieving the primary key(s) of an Entity Framework entity.
+    /// This is crucial for linking audit log entries to specific records.
+    /// </summary>
+    public static class EntityIdHelper
+    {
+        /// <summary>
+        /// Attempts to retrieve the entity's primary key(s) from its <see cref="DbEntityEntry"/>.
+        /// This method is suitable for use before or during `SaveChanges` for existing entities.
+        /// It tries to get the key from EF's metadata, falling back to convention.
+        /// </summary>
+        /// <param name="dbContext">The DbContext instance.</param>
+        /// <param name="entry">The DbEntityEntry representing the entity.</param>
+        /// <returns>A string representation of the entity's primary key(s), or null if not found.</returns>
+        public static string GetEntityId(DbContext dbContext, DbEntityEntry entry)
+        {
+            // Get the EntityType from the DbContext's metadata workspace.
+            var objectContext = ((IObjectContextAdapter)dbContext).ObjectContext;
+            var entityType = objectContext.MetadataWorkspace.GetItems(DataSpace.CSpace)
+                .OfType&lt;EntityType&gt;()
+                .FirstOrDefault(t => t.Name == entry.Entity.GetType().Name || t.Name == entry.Entity.GetType().BaseType?.Name); // Handle proxy types
+
+            if (entityType == null)
+            {
+                // Fallback to convention-based lookup if metadata is not found.
+                return GetEntityIdByConvention(entry); 
+            }
+
+            List&lt;string&gt; keyValues = new List&lt;string&gt;();
+            foreach (var keyProperty in entityType.KeyMembers)
+            {
+                object propertyValue = null;
+                // For Added entities, get the ID from CurrentValues (might be temp or 0).
+                // For Modified/Deleted, get from OriginalValues to ensure consistent ID before save.
+                if (entry.State == EntityState.Added)
+                {
+                    propertyValue = entry.CurrentValues[keyProperty.Name];
+                }
+                else
+                {
+                    propertyValue = entry.OriginalValues[keyProperty.Name];
+                }
+                keyValues.Add(propertyValue?.ToString() ?? "NULL"); // Handle null key values by adding "NULL" string.
+            }
+
+            // Join composite keys with an underscore, otherwise return the single key.
+            return keyValues.Any() ? string.Join("_", keyValues) : null;
+        }
+
+        /// <summary>
+        /// Retrieves the entity's primary key(s) from the entity object itself.
+        /// This method is primarily used *after* `SaveChanges` for newly added entities
+        /// (where database-generated IDs are now populated) or for fetching IDs of existing
+        /// entities for subsequent lookups.
+        /// </summary>
+        /// <param name="entry">The DbEntityEntry representing the entity.</param>
+        /// <returns>A string representation of the entity's primary key(s), or null if not found.</returns>
+        public static string GetEntityIdAfterSave(DbEntityEntry entry)
+        {
+            // Find properties marked with [Key] attribute (System.ComponentModel.DataAnnotations.KeyAttribute).
+            var primaryKeyProperties = entry.Entity.GetType().GetProperties()
+                .Where(p => p.GetCustomAttributes(typeof(KeyAttribute), true).Any())
+                .ToList();
+
+            if (!primaryKeyProperties.Any())
+            {
+                // Fallback to convention (property named "Id" or "{EntityType}Id").
+                return GetEntityIdByConvention(entry);
+            }
+
+            List&lt;string&gt; keyValues = new List&lt;string&gt;();
+            foreach (var pkProperty in primaryKeyProperties)
+            {
+                // Get the value directly from the entity object.
+                // For 'Added' entities post-save, this will be the DB-generated ID.
+                keyValues.Add(pkProperty.GetValue(entry.Entity)?.ToString() ?? "NULL");
+            }
+
+            return keyValues.Any() ? string.Join("_", keyValues) : null;
+        }
+
+        /// <summary>
+        /// Attempts to get the entity ID using common naming conventions (e.g., "Id", "{EntityName}Id").
+        /// This is a fallback mechanism if metadata-based lookup fails.
+        /// </summary>
+        /// <param name="entry">The DbEntityEntry representing the entity.</param>
+        /// <returns>A string representation of the entity's ID, or null if not found by convention.</returns>
+        private static string GetEntityIdByConvention(DbEntityEntry entry)
+        {
+            var entityType = entry.Entity.GetType();
+            // Try to find a property named "Id".
+            var idProperty = entityType.GetProperty("Id");
+            if (idProperty != null)
+            {
+                return idProperty.GetValue(entry.Entity)?.ToString();
+            }
+
+            // Try to find a property named "{EntityType}Id" (e.g., "UserId" for a User entity).
+            string entityTypeName = entityType.Name;
+            var conventionalIdProperty = entityType.GetProperty($"{entityTypeName}Id");
+            if (conventionalIdProperty != null)
+            {
+                return conventionalIdProperty.GetValue(entry.Entity)?.ToString();
+            }
+
+            return null; // No conventional ID found.
+        }
+
+        /// <summary>
+        /// Converts a string entity ID back to the appropriate type(s) for use in
+        /// DbContext.FindAsync or similar operations (e.g., "123" to int 123).
+        /// Handles composite keys by splitting the string.
+        /// </summary>
+        /// <param name="entityType">The Type of the entity.</param>
+        /// <param name="idString">The string representation of the entity ID(s).</param>
+        /// <returns>An array of objects representing the primary key values in their correct types.</returns>
+        public static object[] ConvertIdStringToKey(Type entityType, string idString)
+        {
+            // Get the primary key properties from EF metadata for accurate type conversion.
+            var objectContext = ((IObjectContextAdapter)((DbContext)Activator.CreateInstance(typeof(AuditLogDbContext))).ObjectContext).ObjectContext; // Use a dummy context for metadata
+            var efEntityType = objectContext.MetadataWorkspace.GetItems(DataSpace.CSpace)
+                .OfType&lt;EntityType&gt;()
+                .FirstOrDefault(t => t.Name == entityType.Name || t.Name == entityType.BaseType?.Name);
+
+            if (efEntityType == null || !efEntityType.KeyMembers.Any())
+            {
+                // Fallback for types not found in EF metadata, or if no key members.
+                // This might indicate an issue or a simple type. For simplicity, assume string or int.
+                if (int.TryParse(idString, out int intId))
+                {
+                    return new object[] { intId };
+                }
+                if (Guid.TryParse(idString, out Guid guidId))
+                {
+                    return new object[] { guidId };
+                }
+                return new object[] { idString };
+            }
+
+            var keyValues = idString.Split('_'); // Assume composite keys are joined by '_'
+            var convertedKeys = new List&lt;object&gt;();
+
+            for (int i = 0; i &lt; efEntityType.KeyMembers.Count; i++)
+            {
+                var keyMember = efEntityType.KeyMembers[i];
+                if (i &lt; keyValues.Length)
+                {
+                    string value = keyValues[i];
+                    // Attempt to convert to the actual type of the key property.
+                    var propertyInfo = entityType.GetProperty(keyMember.Name);
+                    if (propertyInfo != null && propertyInfo.PropertyType != null)
+                    {
+                        try
+                        {
+                            convertedKeys.Add(Convert.ChangeType(value, propertyInfo.PropertyType));
+                        }
+                        catch (FormatException)
+                        {
+                            // Fallback if conversion fails (e.g., string for int property).
+                            convertedKeys.Add(value);
+                        }
+                    }
+                    else
+                    {
+                        convertedKeys.Add(value);
+                    }
+                }
+                else
+                {
+                    // Handle missing parts of a composite key.
+                    convertedKeys.Add(null);
+                }
+            }
+            return convertedKeys.ToArray();
+        }
+    }
+}</code></pre>
+            </div>
+        </section>
+
+        <section id="integration" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">7. Integration Points</h2>
+            <p>Integrating the audit logging solution into the existing application required modifications at key points within the web application and its data access layer.</p>
+
+            <h3>7.1. Application Startup (<code>Global.asax.cs</code>) <button class="ai-explain-button" data-component-title="Application Startup"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>IronWorkers.Management.Web/Global.asax.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using IronWorkers.Infrastructure; // Assuming this contains DataContext or other base infrastructure
+using IronWorkers.IWITS.AuditInfrastructure.Config;
+using IronWorkers.IWITS.AuditInfrastructure.Infrastructure; // For DbContextAuditServiceFactory, HttpContextProvider
+using IronWorkers.IWITS.AuditInfrastructure.Interfaces;   // For IHttpContextProvider
+using System;
+using System.Linq;
+using System.Web;
+using System.Web.Mvc;
+using System.Web.Optimization;
+using System.Web.Routing;
+
+namespace IronWorkers.Management.Web
+{
+    /// <summary>
+    /// Represents the ASP.NET MVC application.
+    /// This class contains event handlers for application lifecycle events,
+    /// including the critical Application_Start for audit system initialization.
+    /// </summary>
+    public class MvcApplication : System.Web.HttpApplication
+    {
+        /// <summary>
+        /// Handles the application startup event. This is where global configurations
+        /// and the audit logging system are initialized.
+        /// </summary>
+        protected void Application_Start()
+        {
+            // Standard ASP.NET MVC initialization routines.
+            AreaRegistration.RegisterAllAreas();
+            // GlobalConfiguration.Configure(WebApiConfig.Register); // Assuming WebApiConfig is in place if Web API is used
+            FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
+            RouteConfig.RegisterRoutes(RouteTable.Routes);
+            BundleConfig.RegisterBundles(BundleTable.Bundles);
+
+            // --- Audit System Initialization ---
+            // 1. Initialize the HttpContextProvider.
+            // This concrete provider allows the audit service to access HTTP context details.
+            IHttpContextProvider httpContextProvider = new HttpContextProvider();
+            
+            // 2. Initialize the DbContextAuditServiceFactory.
+            // This factory will now be capable of creating IWITSAuditService instances
+            // with the correct HttpContextProvider dependency.
+            DbContextAuditServiceFactory.Initialize(httpContextProvider); 
+
+            // 3. Register the AuditAccessAttribute as a global filter.
+            // This ensures that selected MVC actions will automatically trigger access logs.
+            // Note: This assumes AuditAccessAttribute is designed to be added globally or selectively.
+            // If it's for selective use, it would be applied directly to controller methods.
+            // GlobalFilters.Filters.Add(new AuditAccessAttribute()); // Uncomment if logging all action accesses globally or applying selectively via attributes.
+        }
+
+        /// <summary>
+        /// Handles the beginning of each HTTP request.
+        /// Configures response caching to prevent client-side caching.
+        /// </summary>
+        protected void Application_BeginRequest()
+        {
+            // Disable caching for all responses to ensure fresh content and proper audit context.
+            Response.Cache.SetCacheability(HttpCacheability.NoCache);
+            Response.Cache.SetExpires(DateTime.UtcNow.AddHours(-1));
+            Response.Cache.SetNoStore();
+        }
+
+        /// <summary>
+        /// Handles unhandled exceptions that occur during application execution.
+        /// Redirects to custom error pages based on the exception type.
+        /// </summary>
+        private void Application_Error()
+        {
+            Exception ex = Server.GetLastError(); // Get the last unhandled exception.
+            Server.ClearError(); // Clear the error to prevent it from bubbling up.
+
+            if (ex is HttpAntiForgeryException)
+            {
+                // Redirect to a specific error page for Anti-Forgery Token issues.
+                Response.Redirect("/ErrorHandler/TokenError");
+            }
+            else
+            {
+                // Redirect to a generic error page for other unhandled exceptions.
+                Response.Redirect("/ErrorHandler/Index");
+            }
+            // IMPORTANT: In a production environment, proper error logging (e.g., Serilog, Elmah)
+            // should be implemented here to capture exception details before redirecting.
+        }
+
+        // Note: Commented out lines related to 'Z.EntityFramework.Plus' and 'EFPlusAuditConfigurator'
+        // indicate previous considerations or integrations with third-party auditing libraries.
+        // The current custom solution replaces or complements these.
+    }
+}</code></pre>
+            </div>
+
+            <h3>7.2. Main DbContext Override (<code>IronWorkersDbContext</code>) <button class="ai-explain-button" data-component-title="Main DbContext Override"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <div class="code-block-header">
+                <span>YourApp.Data/IronWorkersDbContext.cs (or similar project)</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using Repository.Pattern.DataContext; // Assuming DataContext is from this library
+using IronWorkers.IWITS.AuditInfrastructure.Infrastructure; // For DbContextAuditServiceFactory
+using IronWorkers.IWITS.AuditInfrastructure.Service;    // For IWITSAuditService
+using System.Data.Entity;                              // For DbContext
+using System.Data.Entity.Infrastructure;                // For IObjectContextAdapter
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace IronWorker.Data // Or IronWorkers.Management.Web.Data, depending on project structure
+{
+    /// <summary>
+    /// Represents the main application DbContext for IronWorkers data.
+    /// This partial class is extended to integrate the custom audit logging.
+    /// </summary>
+    /// <remarks>
+    /// It overrides the standard SaveChanges and SaveChangesAsync methods
+    /// to delegate auditing responsibilities to the <see cref="IWITSAuditService"/>.
+    /// </remarks>
+    public partial class IronWorkersDbContext : DataContext // Assuming DataContext is the base class for your DbContexts
+    {
+        // Private field to hold an instance of the audit service.
+        private readonly IWITSAuditService _auditService; 
+
+        /// <summary>
+        /// Static constructor for <see cref="IronWorkersDbContext"/>.
+        /// Used to set the Entity Framework database initializer.
+        /// </summary>
+        static IronWorkersDbContext()
+        {
+            // Sets the database initializer to null, meaning Code First Migrations
+            // will not be used to automatically create or modify the database schema.
+            // The database schema is managed externally or via other means.
+            Database.SetInitializer&lt;IronWorkersDbContext&gt;(null);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="IronWorkersDbContext"/> class.
+        /// Configures lazy loading and command timeout, and initializes the audit service.
+        /// </summary>
+        public IronWorkersDbContext()
+            : base("name=IronWorkersDbContext") // Connects using the "IronWorkersDbContext" connection string.
+        {
+            // Disable lazy loading for performance and to prevent unexpected data retrieval.
+            Configuration.LazyLoadingEnabled = false; 
+            
+            // Set a command timeout for the underlying ObjectContext, preventing long-running queries from timing out prematurely.
+            var objectContext = (this as IObjectContextAdapter).ObjectContext;
+            objectContext.CommandTimeout = 180; // 3 minutes timeout
+
+            // Initialize the audit service using the factory.
+            // This ensures a new IWITSAuditService instance is available for this DbContext instance.
+            _auditService = DbContextAuditServiceFactory.CreateAuditService(); 
+        }
+
+        /// <summary>
+        /// Overrides the synchronous SaveChanges() method to integrate audit logging.
+        /// It delegates the actual saving and auditing process to the <see cref="IWITSAuditService"/>.
+        /// </summary>
+        /// <returns>The number of state entries written to the underlying database.</returns>
+        public override int SaveChanges()
+        {
+            // Delegate the SaveChanges operation to the audit service.
+            // The audit service will wrap this base.SaveChanges() call within its
+            // transactional auditing logic.
+            return _auditService.SaveChangesAndAudit(this, () => base.SaveChanges());
+        }
+
+        /// <summary>
+        /// Overrides the asynchronous SaveChangesAsync() method to integrate audit logging.
+        /// It delegates the actual asynchronous saving and auditing process to the <see cref="IWITSAuditService"/>.
+        /// </summary>
+        /// <param name="cancellationToken">A <see cref="CancellationToken"/> to observe while waiting for the task to complete.</param>
+        /// <returns>A task that represents the asynchronous save operation, returning the number of state entries written.</returns>
+        public override async Task&lt;int&gt; SaveChangesAsync(CancellationToken cancellationToken = default(CancellationToken))
+        {
+            // Delegate the SaveChangesAsync operation to the audit service.
+            // The audit service will wrap this base.SaveChangesAsync() call within its
+            // asynchronous, transactional auditing logic.
+            return await _auditService.SaveChangesAndAuditAsync(this, () => base.SaveChangesAsync(cancellationToken), cancellationToken);
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>7.3. Multi-DbContext Strategy (<code>IronWorkers.IWITS.DbService</code>) <button class="ai-explain-button" data-component-title="Multi-DbContext Strategy"><i class="material-icons">auto_awesome</i> AI</button></h3>
+            <p>The application utilizes multiple specialized <code>DbContext</code> instances, each mapped to a specific part of the database or a separate database. The <code>IronWorkers.IWITS.DbService</code> project centralizes the creation of these various contexts.</p>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.DbService/IIronWorkersDbContext.cs</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using Repository.Pattern.DataContext; // Assuming IDataContextAsync is from this library
+
+namespace IronWorkers.IWITS.DbService
+{
+    /// <summary>
+    /// Defines a contract for classes that can create instances of data contexts.
+    /// This interface centralizes the method for obtaining DbContext instances.
+    /// </summary>
+    public interface IIronWorkersDbContext
+    {
+        /// <summary>
+        /// Creates and returns a new instance of an asynchronous data context.
+        /// </summary>
+        /// <returns>An implementation of <see cref="IDataContextAsync"/>.</returns>
+        IDataContextAsync CreateDbContext(); 
+    }
+}</code></pre>
+            </div>
+            <div class="code-block-header">
+                <span>IronWorkers.IWITS.DbService/DbProviders.cs (Example implementations)</span>
+                <button class="refine-code-button" data-language="csharp">✨ Refine Code ✨</button>
+            </div>
+            <div class="code-block-body">
+                <pre><code class="language-csharp">using MasterLocalUnion.Data; // Example: specific DbContext for MasterLocalUnion
+using IWDDEV.Data;             // Example: specific DbContext for IWDDEV
+using IWEnterprise.Data;       // Example: specific DbContext for IWEnterprise
+using Repository.Pattern.DataContext; // For IDataContextAsync
+using IronWorker.Data;         // For IronWorkersDbContext
+using IWATS.Data;              // Example: specific DbContext for IWATS
+using Welders.Data;           // Example: specific DbContext for Welders.Data
+using IronWorkers.IWITS.AuditInfrastructure.Data.DbContexts; // Not used here directly, but shows context separation
+
+namespace IronWorkers.IWITS.DbService
+{
+    /// <summary>
+    /// Provides concrete implementations of <see cref="IIronWorkersDbContext"/>
+    /// for various specialized DbContexts used across the application.
+    /// This centralizes the instantiation logic for different data sources.
+    /// </summary>
+    public class MasterLocalUnionDb : IIronWorkersDbContext
+    {
+        /// <summary>
+        /// Creates a new instance of <see cref="MasterLocalUnionDbContext"/>.
+        /// </summary>
+        public IDataContextAsync CreateDbContext()
+        {
+            return new MasterLocalUnionDbContext();
+        }
+    }
+
+    /// <summary>
+    /// Provides a concrete implementation for the IWATS DbContext.
+    /// </summary>
+    public class IWATSDb : IIronWorkersDbContext
+    {
+        /// <summary>
+        /// Creates a new instance of <see cref="IwatsDbContext"/>.
+        /// </summary>
+        public IDataContextAsync CreateDbContext()
+        {
+            return new IwatsDbContext();
+        }
+    }
+
+    /// <summary>
+    /// Provides a concrete implementation for the IWDDEV DbContext.
+    /// </summary>
+    public class IWDDEVDb : IIronWorkersDbContext
+    {
+        /// <summary>
+        /// Creates a new instance of <see cref="IwdDevDbContext"/>.
+        /// </summary>
+        public IDataContextAsync CreateDbContext()
+        {
+            return new IwdDevDbContext();
+        }
+    }
+
+    /// <summary>
+    /// Provides a concrete implementation for the IWEnterprise DbContext.
+    /// </summary>
+    public class IWEnterpriseDb : IIronWorkersDbContext
+    {
+        /// <summary>
+        /// Creates a new instance of <see cref="IWEnterpriseDbContext"/>.
+        /// </summary>
+        public IDataContextAsync CreateDbContext()
+        {
+            return new IWEnterpriseDbContext();
+        }
+    }
+
+    /// <summary>
+    /// Provides a concrete implementation for the main IronWorkers DbContext.
+    /// This is the DbContext that integrates with the custom audit logging.
+    /// </summary>
+    public class IronWorkersDb : IIronWorkersDbContext
+    {
+        /// <summary>
+        /// Creates a new instance of <see cref="IronWorkersDbContext"/>.
+        /// </summary>
+        public IDataContextAsync CreateDbContext()
+        {
+            return new IronWorkersDbContext();
+        }
+    }
+
+    /// <summary>
+    /// Provides a concrete implementation for the Welders DbContext.
+    /// </summary>
+    public class WeldersDb: IIronWorkersDbContext
+    {
+        /// <summary>
+        /// Creates a new instance of <see cref="WeldersDbContext"/>.
+        /// </summary>
+        public IDataContextAsync CreateDbContext()
+        {
+            return new WeldersDbContext();
+        }
+    }
+}</code></pre>
+            </div>
+        </section>
+
+        <section id="configuration-section" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">8. Configuration</h2>
+            <p>The audit logging system relies on specific connection strings defined in the application's <code>web.config</code> file to connect to its dedicated audit log table.</p>
+
+            <h3>8.1. Connection Strings (<code>web.config</code>)</h3>
+            <div class="code-block-header">web.config</div>
+            <div class="code-block-body">
+                <pre><code class="language-xml">&lt;connectionStrings&gt;
+    &lt;!-- Main Application Database Context --&gt;
+    &lt;add name="IronWorkersDbContext" 
+         connectionString="data source=&quot;ASQL16DEV01.eastus.cloudapp.azure.com&quot;;initial catalog=Ironworkers_sync_Mar14_2024;user id=sa;password=p@55w0rd;MultipleActiveResultSets=True;App=EntityFramework;persist security info=True" 
+         providerName="System.Data.SqlClient" /&gt;
+    
+    &lt;!-- Other Application-Specific Database Contexts --&gt;
+    &lt;add name="IwdDevDbContext" 
+         connectionString="data source=&quot;ASQL16DEV01.eastus.cloudapp.azure.com&quot;;initial catalog=IWDDEV;user id=sa;password=p@55w0rd;MultipleActiveResultSets=True;App=EntityFramework" 
+         providerName="System.Data.SqlClient" /&gt;
+    &lt;add name="IwatsDbContext" 
+         connectionString="data source=&quot;ASQL16DEV01.eastus.cloudapp.azure.com&quot;;initial catalog=IWATS_TEST;user id=sa;password=p@55w0rd;MultipleActiveResultSets=True;App=EntityFramework" 
+         providerName="System.Data.SqlClient" /&gt;
+    &lt;add name="MasterLocalUnionDbContext" 
+         connectionString="data source=&quot;ASQL16DEV01.eastus.cloudapp.azure.com&quot;;initial catalog=MasterLocalUnion;user id=sa;password=p@55w0rd;MultipleActiveResultSets=True;App=EntityFramework" 
+         providerName="System.Data.SqlClient" /&gt;
+    &lt;add name="IWEnterpriseDbContext" 
+         connectionString="data source=&quot;ASQL16DEV01.eastus.cloudapp.azure.com&quot;;initial catalog=IW_ENTERPRISE_TEST;user id=sa;password=p@55w0rd;MultipleActiveResultSets=True;App=EntityFramework" 
+         providerName="System.Data.SqlClient" /&gt;
+    
+    &lt;!-- MySQL Database Context (different provider) --&gt;
+    &lt;add name="WeldersDbContext" 
+         connectionString="User ID=root;Password=Pumex2016!;Host=localhost;Port=3306;Database=welders; Allow Zero Datetime=true;Convert Zero Datetime=True" 
+         providerName="MySql.Data.MySqlClient" /&gt;
+    
+    &lt;!-- Audit Log Database Context --&gt;
+    &lt;!-- This connection string is used by AuditLogDbContext to store audit records. --&gt;
+    &lt;!-- In this setup, it points to the same physical database as IronWorkersDbContext. --&gt;
+    &lt;add name="IronWorkersAuditDbContext" 
+         connectionString="data source=&quot;ASQL16DEV01.eastus.cloudapp.azure.com&quot;;initial catalog=Ironworkers_sync_Mar14_2024;user id=sa;password=p@55w0rd;MultipleActiveResultSets=True;App=EntityFramework;persist security info=True" 
+         providerName="System.Data.SqlClient" /&gt;
+    
+    &lt;!-- Redundant/Legacy Audit Connection String (points to same DB) --&gt;
+    &lt;add name="AuditLogDbConnection" 
+         connectionString="data source=&quot;ASQL16DEV01.eastus.cloudapp.azure.com&quot;;initial catalog=Ironworkers_sync_Mar14_2024;user id=sa;password=p@55w0rd;MultipleActiveResultSets=True;App=EntityFramework;persist security info=True" 
+         providerName="System.Data.SqlClient" /&gt;
+&lt;/connectionStrings&gt;</code></pre>
+            </div>
+            <div class="explanation">
+                <p>The <code>IronWorkersAuditDbContext</code> explicitly uses the connection string named "IronWorkersAuditDbContext" for its database operations. This connection string is configured to point to the <code>Ironworkers_sync_Mar14_2024</code> database on <code>ASQL16DEV01.eastus.cloudapp.azure.com</code>. This means the audit logs will reside in the same physical database as the primary application data for <code>IronWorkersDbContext</code>.</p>
+                <p>While `AuditLogDbConnection` is also present and identical, `IronWorkersAuditDbContext` is hardcoded to use `IronWorkersAuditDbContext` connection name.</p>
+            </div>
+        </section>
+
+        <section id="key-principles" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">9. Key Design Principles & Considerations</h2>
+            <p>The audit logging solution adheres to several software design principles:</p>
+            <ul>
+                <li><strong>Separation of Concerns:</strong> Audit logic is decoupled from core business logic by overriding <code>SaveChanges</code>, using a dedicated audit <code>DbContext</code>, and separating components into distinct projects.</li>
+                <li><strong>Atomic Transactions:</strong> The use of <code>TransactionScope</code> ensures that data changes and their corresponding audit logs are always synchronized (either both succeed or both fail).</li>
+                <li><strong>Preventing Recursion:</strong> <code>AuditSuppressionContext</code> effectively handles the challenge of self-auditing, preventing infinite loops during audit log persistence.</li>
+                <li><strong>Testability:</strong> The use of interfaces (like <code>IHttpContextProvider</code>) and a factory (<code>DbContextAuditServiceFactory</code>) allows for easier mocking and unit testing of individual components.</li>
+                <li><strong>Performance Considerations:</strong>
+                    <ul>
+                        <li>Creation of a new, non-tracking <code>DbContext</code> instance in <code>UpdateAuditLogsWithOriginalDataAsync</code> minimizes overhead when fetching original data for modified entities.</li>
+                        <li>JSON serialization is efficient for storing varied data shapes in <code>PreviousData</code> and <code>NewData</code>.</li>
+                        <li>Immediate saving of audit logs in a separate context within the `TransactionScope` helps ensure timely capture, but the overhead of distributed transactions should be monitored.</li>
+                    </ul>
+                </li>
+            </ul>
+        </section>
+
+        <section id="future-enhancements" class="mb-5 p-4 bg-white rounded shadow-sm">
+            <h2 class="section-header">10. Future Enhancements</h2>
+            <p>While robust, the current audit logging solution can be further enhanced:</p>
+            <ul>
+                <li><strong>Asynchronous Audit Log Persistence:</strong> While <code>SaveChangesAndAuditAsync</code> supports asynchronous main database saves, the final audit log persistence to <code>AuditLogDbContext</code> could potentially be offloaded to a background queue (e.g., using a message queue or a separate background service) if performance becomes a critical concern, especially for high-volume transactions. This would, however, require careful consideration of transactional integrity and potential eventual consistency models.</li>
+                <li><strong>Configurable Auditing:</strong> Implement a more flexible configuration mechanism (e.g., through attributes, code, or external file) to specify which entities or properties should be audited, and which should be excluded (e.g., sensitive data like passwords).</li>
+                <li><strong>Customizable User Identity Resolution:</strong> Allow for more flexible ways to determine the "ModifiedBy" user, perhaps supporting different authentication schemes or richer user contexts.</li>
+                <li><strong>Audit Data Archiving/Retention Policies:</strong> Implement policies for archiving or purging old audit data to manage database size and performance.</li>
+                <li><strong>Audit Log Viewer/Reporting:</strong> Develop a dedicated UI for viewing, filtering, and reporting on audit log entries, making the audit trail easily accessible for compliance and debugging.</li>
+                <li><strong>Error Handling and Monitoring:</strong> Enhance error handling for audit failures with robust logging (e.g., Serilog, Application Insights) and alerting, ensuring that audit log integrity issues are immediately identified.</li>
+            </ul>
+        </section>
+
+        <section id="technical-assistant" class="mb-5 p-4 bg-white rounded shadow-sm llm-section">
+            <h2 class="section-header">11. Technical Assistant <small class="text-muted">(Powered by Google Gemini 1.5 Pro)</small></h2>
+            <p>Have questions about this audit implementation? Ask our AI assistant for explanations!</p>
+            <div class="llm-input-group mb-3">
+                <label for="llm-question-input" class="form-label">Your Question:</label>
+                <textarea class="form-control" id="llm-question-input" placeholder="e.g., How does TransactionScope ensure atomicity?" rows="3"></textarea>
+            </div>
+            <button id="ask-llm-button" class="btn btn-primary">Ask Assistant</button>
+            <div id="llm-response-area" class="llm-output-area d-none">
+                <div class="d-flex justify-content-center align-items-center" id="llm-loading-spinner" style="min-height: 100px;">
+                    <div class="llm-loading-spinner"></div>
+                    <p class="ms-3 mb-0 text-muted">Thinking...</p>
+                </div>
+                <div id="llm-response-text" class="d-none"></div>
+            </div>
+        </section>
+
+        <div class="mt-4 p-4 bg-light rounded">
+            <h3>Key Source Files</h3>
+            <ul>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Entities/NewAuditLogs.cs</code> - Central audit log entity structure</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Service/IWITSAuditService.cs</code> - Main audit orchestration service</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Data.DbContexts/AuditLogDbContext.cs</code> - Dedicated audit database context</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Interfaces/IHttpContextProvider.cs</code> - HTTP context abstraction interface</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Infrastructure/HttpContextProvider.cs</code> - Concrete HTTP context provider</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Infrastructure/DbContextAuditServiceFactory.cs</code> - Factory for audit service instances</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Config/IWITSAuditConfigurator.cs</code> - Pre-save change capture logic</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Model/AuditCaptureResult.cs</code> - DTO for audit capture results</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Helpers/AuditSuppressionContext.cs</code> - Mechanism to prevent recursive auditing</li>
+                <li><code>IronWorkers.IWITS.AuditInfrastructure.Helpers/EntityIdHelper.cs</code> - Helper for entity ID retrieval</li>
+                <li><code>IronWorkers.Management.Web/Global.asax.cs</code> - Application startup and audit system initialization</li>
+                <li><code>YourApp.Data/IronWorkersDbContext.cs</code> - Main application DbContext with audit overrides</li>
+                <li><code>IronWorkers.IWITS.DbService/IIronWorkersDbContext.cs</code> and concrete providers - Multi-DbContext strategy</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- The Modal Structure -->
+    <div class="modal fade" id="geminiModal" tabindex="-1" aria-labelledby="geminiModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="geminiModalLabel">AI Assistant</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="loading-container text-center" id="modal-loading-spinner">
+                        <div class="llm-loading-spinner mx-auto"></div>
+                        <p class="ms-3 mb-0 text-muted">Processing your request...</p>
+                    </div>
+                    <div id="modal-content-area" class="d-none"></div>
+
+                    <!-- New: Follow-up question section -->
+                    <div class="follow-up-section mt-4 pt-3 border-top d-none">
+                        <h6 class="text-muted">Have more questions about this explanation?</h6>
+                        <textarea class="form-control" id="follow-up-question-input" placeholder="Ask your follow-up question here... (e.g., 'Can you elaborate on JSON serialization?')" rows="2"></textarea>
+                        <button id="ask-follow-up-button" class="btn btn-primary btn-sm mt-2">Ask Follow-up</button>
+                        <div id="follow-up-responses" class="follow-up-responses mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating AI Assistant Button -->
+    <button class="fab-ai-assistant" id="fab-ai-assistant-button" title="Open AI Assistant">
+        <i class="material-icons">psychology</i>
+    </button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" xintegrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    
+    <script>
+        hljs.highlightAll();
+        
+        document.addEventListener('DOMContentLoaded', function () {
+            // Bootstrap navbar functionality
+            var navbarToggler = document.querySelector('.navbar-toggler');
+            if (navbarToggler) {
+                var collapseElement = document.getElementById('navbarNav');
+                if (collapseElement) {
+                    var bsCollapse = new bootstrap.Collapse(collapseElement, { toggle: false });
+                    navbarToggler.addEventListener('click', function () { bsCollapse.toggle(); });
+                    
+                    var navLinks = document.querySelectorAll('#navbarNav .nav-link');
+                    navLinks.forEach(function(link) {
+                        link.addEventListener('click', function() {
+                            if (navbarToggler.offsetParent !== null) {
+                                bsCollapse.hide();
+                            }
+                            // Scroll to target section smoothly
+                            const targetId = this.getAttribute('href').substring(1);
+                            const targetElement = document.getElementById(targetId);
+                            if (targetElement) {
+                                window.scrollTo({
+                                    top: targetElement.offsetTop - 70, // Adjust for fixed navbar height
+                                    behavior: 'smooth'
+                                });
+                            }
+                        });
+                    });
+                }
+            }
+
+            // --- Modal Elements ---
+            const geminiModalElement = document.getElementById('geminiModal');
+            const geminiModal = new bootstrap.Modal(geminiModalElement);
+            const modalTitle = document.getElementById('geminiModalLabel');
+            const modalLoadingSpinner = document.getElementById('modal-loading-spinner');
+            const modalContentArea = document.getElementById('modal-content-area');
+            const followUpSection = document.querySelector('.follow-up-section');
+            const followUpQuestionInput = document.getElementById('follow-up-question-input');
+            const askFollowUpButton = document.getElementById('ask-follow-up-button');
+            const followUpResponsesArea = document.getElementById('follow-up-responses');
+
+            let currentModalChatHistory = []; // To store conversation history for follow-ups
+
+            // Add event listeners for modal show/hide to control body scroll
+            geminiModalElement.addEventListener('show.bs.modal', function () {
+                document.body.classList.add('modal-open');
+                // Explicitly set overflow to hidden on body to prevent background scrollbar
+                document.body.style.overflow = 'hidden'; 
+            });
+            geminiModalElement.addEventListener('hidden.bs.modal', function () {
+                document.body.classList.remove('modal-open');
+                // Reset body overflow when modal is hidden
+                document.body.style.overflow = ''; 
+                // Optionally clear history when modal closes, uncomment if preferred for new session per open
+                // currentModalChatHistory = []; 
+            });
+
+            function showModalWithLoading(title) {
+                modalTitle.textContent = title;
+                modalContentArea.classList.add('d-none');
+                modalLoadingSpinner.classList.remove('d-none');
+                followUpSection.classList.add('d-none'); // Hide follow-up section initially
+                followUpResponsesArea.innerHTML = ''; // Clear previous follow-up responses
+                followUpQuestionInput.value = ''; // Clear follow-up input
+                currentModalChatHistory = []; // Always clear history when a new primary query starts
+                geminiModal.show();
+            }
+
+            function updateModalContent(rawContent, append = false) {
+                modalLoadingSpinner.classList.add('d-none');
+                
+                // Use Marked.js to convert Markdown to HTML
+                const htmlContent = marked.parse(rawContent);
+
+                if (append) {
+                    const newResponseDiv = document.createElement('div');
+                    newResponseDiv.classList.add('mt-3', 'p-3', 'ai-response', 'rounded');
+                    newResponseDiv.innerHTML = `<p class="mb-1 text-muted"><strong>AI Response:</strong></p><div class="markdown-content">${htmlContent}</div>`;
+                    followUpResponsesArea.appendChild(newResponseDiv);
+                } else {
+                    modalContentArea.innerHTML = `<div class="markdown-content">${htmlContent}</div>`;
+                    modalContentArea.classList.remove('d-none');
+                    followUpSection.classList.remove('d-none'); // Show follow-up section after initial response
+                }
+
+                // Re-highlight any code blocks that might be within the markdown content
+                (append ? followUpResponsesArea : modalContentArea).querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+            }
+
+            // Gemini API call function
+            async function callGeminiAPI(chatHistoryArray) {
+                // IMPORTANT: The apiKey is left as an empty string. Canvas will automatically provide it at runtime.
+                // DO NOT add any API key validation logic here.
+                //const apiKey = ""; 
+                const apiKey = "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"; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                // Build contents array for Gemini API
+                let contents = [];
+                chatHistoryArray.forEach(entry => {
+                    contents.push({ role: entry.role, parts: [{ text: entry.content }] });
+                });
+                
+                const payload = {
+                    contents: contents,
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 1000
+                    }
+                };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        return result.candidates[0].content.parts[0].text;
+                    } else {
+                        console.error('Unexpected Gemini API response structure:', result);
+                        return 'Error: Unexpected response from AI assistant. Please try again.';
+                    }
+                } catch (error) {
+                    console.error('Gemini API call failed:', error);
+                    return 'Error: Failed to connect to the AI assistant. Please check your your network connection.';
+                }
+            }
+
+            // Technical Assistant (existing functionality for the main LLM section)
+            const questionInput = document.getElementById('llm-question-input');
+            const askButton = document.getElementById('ask-llm-button');
+            const responseArea = document.getElementById('llm-response-area');
+            const loadingSpinner = document.getElementById('llm-loading-spinner');
+            const responseText = document.getElementById('llm-response-text');
+
+            askButton.addEventListener('click', async () => {
+                const question = questionInput.value.trim();
+                if (!question) {
+                    responseText.innerHTML = '<p class="text-danger">Please enter a question.</p>';
+                    responseArea.classList.remove('d-none');
+                    loadingSpinner.classList.add('d-none');
+                    responseText.classList.remove('d-none');
+                    return;
+                }
+
+                responseArea.classList.remove('d-none');
+                loadingSpinner.classList.remove('d-none');
+                responseText.classList.add('d-none');
+                
+                // For the main LLM section query, start a new chat history for the API call
+                const initialChatHistoryForMainQuery = [{ role: "user", content: question }];
+
+                // Call the Gemini API function
+                const answer = await callGeminiAPI(initialChatHistoryForMainQuery);
+                loadingSpinner.classList.add('d-none');
+                responseText.innerHTML = marked.parse(answer); // Render markdown in the main response area too
+                responseText.classList.remove('d-none');
+                responseText.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+            });
+
+            questionInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    askButton.click();
+                }
+            });
+
+            // --- New/Modified Feature: Code Refinement with Modal ---
+            const refineButtons = document.querySelectorAll('.refine-code-button');
+
+            refineButtons.forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    showModalWithLoading("Code Refinement"); 
+                    
+                    const codeBlockHeader = event.target.closest('.code-block-header');
+                    const codeElement = codeBlockHeader.nextElementSibling.querySelector('pre code');
+                    
+                    if (!codeElement) {
+                        updateModalContent('<p class="error-message">No code found for refinement.</p>');
+                        return;
+                    }
+
+                    const code = codeElement.textContent;
+                    const language = codeElement.className.replace('language-', '').trim();
+
+                    const refinementPrompt = `As an expert ${language.toUpperCase()} developer and software architect, provide concise suggestions to refine and improve the following ${language.toUpperCase()} code for better readability, performance, maintainability, or adherence to best practices. Focus on tangible, actionable advice. If the code is already excellent, state that.
+\`\`\`${language}
+${code}
+\`\`\`
+Refinement suggestions:`;
+                    currentModalChatHistory.push({ role: "user", content: refinementPrompt }); 
+
+                    try {
+                        const response = await callGeminiAPI(currentModalChatHistory);
+                        currentModalChatHistory.push({ role: "assistant", content: response }); // Use 'assistant' role
+                        updateModalContent(response);
+                    } catch (error) {
+                        updateModalContent(`<p class="error-message">Error refining code: ${error.message}. Please try again.</p>`);
+                        console.error('Code refinement failed:', error);
+                    }
+                });
+            });
+
+            // --- New Feature: AI Explanation with Modal ---
+            const explainButtons = document.querySelectorAll('.ai-explain-button');
+
+            explainButtons.forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    const actualButton = event.target.closest('.ai-explain-button'); 
+                    const componentTitle = actualButton.dataset.componentTitle || 'Selected Component';
+                    
+                    showModalWithLoading(`AI Explanation for: ${componentTitle}`);
+
+                    let currentElement = actualButton.closest('h3') || actualButton.closest('.section-header'); // Find nearest heading
+                    let codeContent = '';
+                    // Traverse siblings to find the code block related to this h3/section-header
+                    if (currentElement) {
+                        let nextSibling = currentElement.nextElementSibling;
+                        // Find the immediate code block header/body after the current element
+                        while (nextSibling && !nextSibling.classList.contains('code-block-header') && !nextSibling.classList.contains('code-block-body')) {
+                            nextSibling = nextSibling.nextElementSibling;
+                        }
+                        if (nextSibling && nextSibling.classList.contains('code-block-header')) {
+                             const codeElement = nextSibling.nextElementSibling.querySelector('pre code');
+                             if (codeElement) {
+                                codeContent = codeElement.textContent;
+                            }
+                        } else if (nextSibling && nextSibling.classList.contains('code-block-body')) {
+                            const codeElement = nextSibling.querySelector('pre code');
+                             if (codeElement) {
+                                codeContent = codeElement.textContent;
+                            }
+                        }
+                    }
+
+                    const explanationPrompt = `As an expert software architect, provide a detailed explanation of the purpose, design, and role within the overall system for the component titled "${componentTitle}".
+Consider its dependencies, responsibilities, and how it interacts with other parts of the audit logging solution as described in the document.
+If the component content is provided below, analyze it. If it's configuration (like XML), explain its configuration purpose.
+The user will provide you with relevant code snippets or context from the document.
+Always maintain a helpful and professional tone.
+If the question is beyond the scope of the provided document content, politely state that you can only answer questions related to the document.
+
+Component Content:
+\`\`\`
+${codeContent || 'No code content explicitly extracted for this component. Explain based on its title and general context of audit logging systems.'}
+\`\`\`
+Comprehensive Explanation:`;
+                    currentModalChatHistory.push({ role: "user", content: explanationPrompt }); 
+
+                    try {
+                        const explanation = await callGeminiAPI(currentModalChatHistory);
+                        currentModalChatHistory.push({ role: "assistant", content: explanation }); // Use 'assistant' role
+                        updateModalContent(explanation);
+                    } catch (error) {
+                        updateModalContent(`<p class="error-message">Error getting explanation: ${error.message}</p>`);
+                        console.error('AI explanation failed:', error);
+                    }
+                });
+            });
+
+            // --- Follow-up question logic (for within modal) ---
+            askFollowUpButton.addEventListener('click', async () => {
+                const followUpQuestion = followUpQuestionInput.value.trim();
+                if (!followUpQuestion) {
+                    followUpQuestionInput.placeholder = "Please enter your question.";
+                    return;
+                }
+
+                // Append user's question to the modal's history area
+                const userQuestionDiv = document.createElement('div');
+                userQuestionDiv.classList.add('mt-3', 'p-3', 'user-question', 'rounded');
+                userQuestionDiv.innerHTML = `<p class="mb-1"><strong>Your Question:</strong></p><p>${followUpQuestion}</p>`;
+                followUpResponsesArea.appendChild(userQuestionDiv);
+                
+                followUpQuestionInput.value = ''; // Clear the input field
+                followUpQuestionInput.placeholder = "Asking...";
+                askFollowUpButton.disabled = true; // Disable button during processing
+
+                // Add user's follow-up to chat history 
+                currentModalChatHistory.push({ role: "user", content: followUpQuestion }); 
+                
+                // Show a temporary loading indicator within the follow-up responses area
+                const tempLoadingDiv = document.createElement('div');
+                tempLoadingDiv.classList.add('loading-container', 'text-center', 'mt-3');
+                tempLoadingDiv.innerHTML = `<div class="llm-loading-spinner mx-auto"></div><p class="ms-3 mb-0 text-muted">Thinking...</p>`;
+                followUpResponsesArea.appendChild(tempLoadingDiv);
+
+
+                try {
+                    const followUpAnswer = await callGeminiAPI(currentModalChatHistory);
+                    currentModalChatHistory.push({ role: "assistant", content: followUpAnswer }); // Use 'assistant' role
+                    tempLoadingDiv.remove(); // Remove loading indicator
+                    updateModalContent(followUpAnswer, true); // Append the new response
+                } catch (error) {
+                    tempLoadingDiv.remove(); // Remove loading indicator
+                    const errorDiv = document.createElement('div');
+                    errorDiv.classList.add('mt-3', 'p-3', 'error-message', 'rounded');
+                    errorDiv.innerHTML = `<p>Error: Could not get a follow-up answer. ${error.message}</p>`;
+                    followUpResponsesArea.appendChild(errorDiv);
+                    console.error('Follow-up AI failed:', error);
+                } finally {
+                    followUpQuestionInput.placeholder = "Ask your follow-up question here...";
+                    askFollowUpButton.disabled = false; // Re-enable button
+                }
+            });
+
+            followUpQuestionInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    askFollowUpButton.click();
+                }
+            });
+
+
+            // --- New Feature: Page Search ---
+            const pageSearchInput = document.getElementById('page-search-input');
+            const searchResultsInfo = document.getElementById('search-results-info');
+            
+            // To restore content, we need to clone the original state of specific sections,
+            // as innerHTML might strip event listeners or alter structure.
+            // A simpler approach for search might be to just iterate and replace, then re-highlight.
+            let sectionsToSearch = document.querySelectorAll('section, .key-source-files ul'); // Target relevant sections
+            let originalSectionHTML = new Map(); // Store original HTML for each section
+
+            sectionsToSearch.forEach(section => {
+                originalSectionHTML.set(section, section.innerHTML);
+            });
+
+
+            pageSearchInput.addEventListener('input', function() {
+                const searchTerm = this.value.trim();
+                let matches = 0;
+
+                // Restore original HTML for each section before starting a new search
+                sectionsToSearch.forEach(section => {
+                    section.innerHTML = originalSectionHTML.get(section);
+                });
+                hljs.highlightAll(); // Re-highlight all code blocks after restoring content
+
+                if (searchTerm === '') {
+                    searchResultsInfo.textContent = '';
+                    return;
+                }
+
+                // Use a RegExp to find the search term globally and case-insensitively
+                const regex = new RegExp(`(${searchTerm})`, 'gi');
+                
+                // Iterate through all text nodes within the searchable sections
+                sectionsToSearch.forEach(section => {
+                    // Create a TreeWalker to traverse only text nodes, excluding script and style tags
+                    const walker = document.createTreeWalker(
+                        section,
+                        NodeFilter.SHOW_TEXT,
+                        {
+                            // Filter out text nodes that are inside 'script' or 'style' elements
+                            // or within the search bar itself
+                            acceptNode: function(node) {
+                                if (node.parentNode.nodeName === 'SCRIPT' || node.parentNode.nodeName === 'STYLE' ||
+                                    node.closest('.search-bar-container') || node.closest('.modal')) {
+                                    return NodeFilter.FILTER_REJECT;
+                                }
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                        }
+                    );
+
+                    let currentNode;
+                    while (currentNode = walker.nextNode()) {
+                        const originalText = currentNode.nodeValue;
+                        const replacedText = originalText.replace(regex, `<span class="search-result-highlight">$1</span>`);
+                        
+                        if (originalText !== replacedText) {
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = replacedText;
+                            while (tempDiv.firstChild) {
+                                currentNode.parentNode.insertBefore(tempDiv.firstChild, currentNode);
+                            }
+                            currentNode.remove();
+                            matches += (replacedText.match(/class="search-result-highlight"/g) || []).length;
+                        }
+                    }
+                });
+
+
+                if (matches > 0) {
+                    searchResultsInfo.textContent = `Found ${matches} result(s).`;
+                } else {
+                    searchResultsInfo.textContent = 'No results found.';
+                }
+            });
+
+
+            // --- Floating AI Assistant Button ---
+            const fabAIButton = document.getElementById('fab-ai-assistant-button');
+            fabAIButton.addEventListener('click', () => {
+                showModalWithLoading("AI Assistant"); // Initialize modal with loading state
+                const defaultPrompt = `Hello! I'm your AI Technical Assistant for this document. Ask me anything about the audit log implementation, code components, or architectural decisions. For example, you can ask:
+* "Explain the purpose of the \`NewAuditLogs\` entity."
+* "How does \`TransactionScope\` ensure atomicity in this setup?"
+* "Suggest refinements for the \`IWITSAuditService\` code."
+I'm here to help you deep dive into the details!`;
+                // currentModalChatHistory is already cleared by showModalWithLoading
+                currentModalChatHistory.push({ role: "user", content: defaultPrompt }); // Add the initial prompt as a user message
+                
+                // For the initial display of the assistant's intro, we don't need to call the API.
+                // Just update the modal content with the default prompt.
+                updateModalContent(defaultPrompt); // Display the intro message in the modal body
+            });
+        });
+    </script>
+</body>
+</html>
